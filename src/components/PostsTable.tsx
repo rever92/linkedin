@@ -120,6 +120,9 @@ export default function PostsTable({ data }: PostsTableProps) {
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {post.shares.toLocaleString()}
                 </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  {post.category ? post.category : <span className="loader">Cargando...</span>}
+                </td>
               </tr>
             ))}
           </tbody>
