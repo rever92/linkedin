@@ -1,0 +1,13 @@
+/* Dashboard.css */
+.recharts-tooltip {
+    border-radius: 8px;
+  }
+  
+  .recharts-cartesian-axis-tick {
+    font-size: 12px;
+    fill: #ffffff;
+  }
+  
+  .recharts-cartesian-axis-line {
+    display: none; /* Ocultar líneas de los ejes */
+  }

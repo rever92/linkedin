@@ -7,11 +7,11 @@ interface MetricSelectorProps {
 
 export default function MetricSelector({ onMetricChange, selectedMetric }: MetricSelectorProps) {
   const metrics = [
-    { value: 'views', label: 'Views' },
-    { value: 'likes', label: 'Likes' },
-    { value: 'comments', label: 'Comments' },
-    { value: 'shares', label: 'Shares' },
-    { value: 'engagement', label: 'Total Engagement' },
+    { value: 'views', label: 'Visualizaciones' },
+    { value: 'likes', label: 'Reacciones' },
+    { value: 'comments', label: 'Comentarios' },
+    { value: 'shares', label: 'Compartidos' },
+    { value: 'engagement', label: 'Interacciones Totales' },
   ];
 
   return (

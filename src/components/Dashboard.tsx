@@ -1,42 +1,105 @@
 import { useState } from 'react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { LinkedInPost, DashboardStats } from '../types';
 import { Activity, ThumbsUp, MessageCircle, Share2, Eye } from 'lucide-react';
 import MetricSelector from './MetricSelector';
 import PostsTable from './PostsTable';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import './Dashboard.css';
+import { format } from 'date-fns';
 
 interface DashboardProps {
   data: LinkedInPost[];
 }
 
 export default function Dashboard({ data }: DashboardProps) {
-  const [selectedMetric, setSelectedMetric] = useState('views');
+  const [selectedMetrics, setSelectedMetrics] = useState({
+    views: true,
+    likes: false,
+    comments: false,
+    shares: false,
+  });
+  const [dateRange, setDateRange] = useState('thisMonth');
+  const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
+  const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
 
-  const stats: DashboardStats = {
-    totalPosts: data.length,
-    totalViews: data.reduce((sum, post) => sum + post.views, 0),
-    totalLikes: data.reduce((sum, post) => sum + post.likes, 0),
-    totalComments: data.reduce((sum, post) => sum + post.comments, 0),
-    totalShares: data.reduce((sum, post) => sum + post.shares, 0),
-    avgEngagementRate: (data.reduce((sum, post) => 
-      sum + ((post.likes + post.comments + post.shares) / post.views) * 100, 0) / data.length) || 0
+  const handleDateRangeChange = (range: string) => {
+    setDateRange(range);
+    if (range === 'custom') {
+      setCustomStartDate(null);
+      setCustomEndDate(null);
+    }
   };
 
-  const chartData = data
-    .map(post => ({
-      date: new Date(post.date),
-      views: post.views,
-      likes: post.likes,
-      comments: post.comments,
-      shares: post.shares,
-      engagement: post.likes + post.comments + post.shares
-    }))
-    .filter(item => !isNaN(item.date.getTime()))
-    .sort((a, b) => a.date.getTime() - b.date.getTime())
-    .map(item => ({
-      ...item,
-      date: item.date.toLocaleDateString()
-    }));
+  const getFilteredData = () => {
+    const now = new Date();
+    let startDate: Date;
+    let endDate: Date = now;
+
+    switch (dateRange) {
+      case 'thisWeek':
+        startDate = new Date(now.setDate(now.getDate() - now.getDay()));
+        break;
+      case 'thisMonth':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'lastMonth':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+        break;
+      case 'last3Months':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 3);
+        break;
+      case 'last6Months':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 6);
+        break;
+      case 'lastYear':
+        startDate = new Date(now);
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      case 'allTime':
+        startDate = new Date(0);
+        break;
+      case 'custom':
+        startDate = customStartDate || new Date(0);
+        endDate = customEndDate || now;
+        break;
+      default:
+        startDate = new Date(0);
+    }
+
+    return data.filter(post => {
+      const postDate = new Date(post.date);
+      return postDate >= startDate && postDate <= endDate;
+    });
+  };
+
+  const filteredData = getFilteredData();
+
+  const stats: DashboardStats = {
+    totalPosts: filteredData.length,
+    totalViews: filteredData.reduce((sum, post) => sum + post.views, 0),
+    totalLikes: filteredData.reduce((sum, post) => sum + post.likes, 0),
+    totalComments: filteredData.reduce((sum, post) => sum + post.comments, 0),
+    totalShares: filteredData.reduce((sum, post) => sum + post.shares, 0),
+    avgEngagementRate: (filteredData.reduce((sum, post) => 
+      sum + ((post.likes + post.comments + post.shares) / post.views) * 100, 0) / filteredData.length) || 0
+  };
+
+  const handleMetricChange = (metric: 'views' | 'likes' | 'comments' | 'shares') => {
+    setSelectedMetrics(prev => ({ ...prev, [metric]: !prev[metric] }));
+  };
+
+  const chartData = filteredData.map(post => ({
+    date: new Date(post.date).toLocaleDateString(),
+    views: post.views,
+    likes: post.likes,
+    comments: post.comments,
+    shares: post.shares,
+  }));
 
   const getBarColor = (metric: string) => {
     const colors = {
@@ -49,57 +112,154 @@ export default function Dashboard({ data }: DashboardProps) {
     return colors[metric as keyof typeof colors] || '#3b82f6';
   };
 
+  const startDate = new Date(filteredData[0]?.date);
+  const endDate = new Date(filteredData[filteredData.length - 1]?.date);
+  const midDate = new Date((startDate.getTime() + endDate.getTime()) / 2);
+
   return (
     <div className="space-y-6">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-semibold">Performance Over Time</h3>
+        <div>
+          <select value={dateRange} onChange={(e) => handleDateRangeChange(e.target.value)} className="border rounded-md p-1">
+            <option value="thisWeek">Esta semana</option>
+            <option value="thisMonth">Este mes</option>
+            <option value="lastMonth">El mes pasado</option>
+            <option value="last3Months">Últimos 3 meses</option>
+            <option value="last6Months">Últimos 6 meses</option>
+            <option value="lastYear">Último año</option>
+            <option value="allTime">Todo el tiempo</option>
+            <option value="custom">Personalizado</option>
+          </select>
+          {dateRange === 'custom' && (
+            <div className="flex space-x-2">
+              <DatePicker
+                selected={customStartDate}
+                onChange={(date) => setCustomStartDate(date)}
+                placeholderText="Fecha de inicio"
+              />
+              <DatePicker
+                selected={customEndDate}
+                onChange={(date) => setCustomEndDate(date)}
+                placeholderText="Fecha de fin"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         <StatCard
-          title="Total Posts"
+          title="Posts"
           value={stats.totalPosts}
           icon={<Activity className="w-6 h-6" />}
         />
         <StatCard
-          title="Total Views"
+          title="Visualizaciones"
           value={stats.totalViews}
           icon={<Eye className="w-6 h-6" />}
         />
         <StatCard
-          title="Total Likes"
+          title="Reacciones"
           value={stats.totalLikes}
           icon={<ThumbsUp className="w-6 h-6" />}
         />
         <StatCard
-          title="Total Comments"
+          title="Comentarios"
           value={stats.totalComments}
           icon={<MessageCircle className="w-6 h-6" />}
         />
         <StatCard
-          title="Total Shares"
+          title="Compartidos"
           value={stats.totalShares}
           icon={<Share2 className="w-6 h-6" />}
         />
       </div>
 
       <div className="bg-white p-6 rounded-lg shadow">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-semibold">Performance Over Time</h3>
-          <MetricSelector 
-            selectedMetric={selectedMetric}
-            onMetricChange={setSelectedMetric}
-          />
+        <div className="flex space-x-4 mb-4">
+          {Object.keys(selectedMetrics).map(metric => (
+            <label key={metric} className="flex items-center">
+              <input
+                type="checkbox"
+                checked={selectedMetrics[metric as keyof typeof selectedMetrics]}
+                onChange={() => handleMetricChange(metric as 'views' | 'likes' | 'comments' | 'shares')}
+              />
+              <span className="ml-2">{metric.charAt(0).toUpperCase() + metric.slice(1)}</span>
+            </label>
+          ))}
         </div>
+
+        <div className="flex space-x-4 mb-4">
+          {Object.keys(selectedMetrics).map(metric => (
+            selectedMetrics[metric as keyof typeof selectedMetrics] && (
+              <div key={metric} className="flex items-center">
+                <div style={{ backgroundColor: getBarColor(metric), width: 20, height: 10 }} className="mr-2"></div>
+                <span>{metric.charAt(0).toUpperCase() + metric.slice(1)}</span>
+              </div>
+            )
+          ))}
+        </div>
+
         <div className="h-[400px]">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
-              <Bar 
-                dataKey={selectedMetric}
-                fill={getBarColor(selectedMetric)}
-                name={selectedMetric.charAt(0).toUpperCase() + selectedMetric.slice(1)}
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#ffffff" opacity={0.1} />
+              <XAxis 
+                dataKey="date" 
+                stroke="#ffffff" 
+                tick={{ fontSize: 12, fill: '#ffffff' }} 
+                domain={['dataMin', 'dataMax']}
+                ticks={[startDate.toLocaleDateString(), midDate.toLocaleDateString(), endDate.toLocaleDateString()]}
+                tickFormatter={(date) => new Date(date).toLocaleDateString()}
               />
-            </BarChart>
+              <YAxis yAxisId="left" stroke="#ffffff" tick={{ fontSize: 12, fill: '#ffffff' }} />
+              <YAxis yAxisId="right" orientation="right" stroke="#ffffff" tick={{ fontSize: 12, fill: '#ffffff' }} />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#333', border: 'none', borderRadius: '8px' }} 
+                itemStyle={{ color: '#ffffff' }} 
+              />
+              {selectedMetrics.views && (
+                <Line 
+                  yAxisId="left"
+                  type="monotone" 
+                  dataKey="views" 
+                  stroke={getBarColor('views')} 
+                  strokeWidth={2} 
+                  dot={false} 
+                />
+              )}
+              {selectedMetrics.likes && (
+                <Line 
+                  yAxisId="right"
+                  type="monotone" 
+                  dataKey="likes" 
+                  stroke={getBarColor('likes')} 
+                  strokeWidth={2} 
+                  dot={false} 
+                />
+              )}
+              {selectedMetrics.comments && (
+                <Line 
+                  yAxisId="right"
+                  type="monotone" 
+                  dataKey="comments" 
+                  stroke={getBarColor('comments')} 
+                  strokeWidth={2} 
+                  dot={false} 
+                />
+              )}
+              {selectedMetrics.shares && (
+                <Line 
+                  yAxisId="right"
+                  type="monotone" 
+                  dataKey="shares" 
+                  stroke={getBarColor('shares')} 
+                  strokeWidth={2} 
+                  dot={false} 
+                />
+              )}
+            </LineChart>
           </ResponsiveContainer>
         </div>
       </div>

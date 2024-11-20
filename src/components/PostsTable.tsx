@@ -10,9 +10,15 @@ export default function PostsTable({ data }: PostsTableProps) {
   const [sortField, setSortField] = useState<keyof LinkedInPost>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(0);
+  const [postsPerPage, setPostsPerPage] = useState(25);
+
+  const filteredData = useMemo(() => {
+    return data.filter(post => post.text.trim() !== '');
+  }, [data]);
 
   const sortedAndFilteredData = useMemo(() => {
-    return data
+    return filteredData
       .filter(post => 
         post.text.toLowerCase().includes(searchTerm.toLowerCase())
       )
@@ -31,7 +37,12 @@ export default function PostsTable({ data }: PostsTableProps) {
         }
         return aValue < bValue ? 1 : -1;
       });
-  }, [data, sortField, sortDirection, searchTerm]);
+  }, [filteredData, sortField, sortDirection, searchTerm]);
+
+  const paginatedData = useMemo(() => {
+    const startIndex = currentPage * postsPerPage;
+    return sortedAndFilteredData.slice(startIndex, startIndex + postsPerPage);
+  }, [sortedAndFilteredData, currentPage, postsPerPage]);
 
   const handleSort = (field: keyof LinkedInPost) => {
     if (sortField === field) {
@@ -47,6 +58,15 @@ export default function PostsTable({ data }: PostsTableProps) {
     return sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />;
   };
 
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handlePostsPerPageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
+    setPostsPerPage(Number(event.target.value));
+    setCurrentPage(0);
+  };
+
   return (
     <div className="bg-white rounded-lg shadow">
       <div className="p-4 border-b">
@@ -54,7 +74,7 @@ export default function PostsTable({ data }: PostsTableProps) {
           <Search className="w-5 h-5 text-gray-400" />
           <input
             type="text"
-            placeholder="Search posts..."
+            placeholder="Buscar publicaciones..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
@@ -65,7 +85,7 @@ export default function PostsTable({ data }: PostsTableProps) {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['date', 'text', 'views', 'likes', 'comments', 'shares'].map((field) => (
+              {['fecha', 'texto', 'visualizaciones', 'reacciones', 'comentarios', 'compartidos'].map((field) => (
                 <th
                   key={field}
                   onClick={() => handleSort(field as keyof LinkedInPost)}
@@ -80,7 +100,7 @@ export default function PostsTable({ data }: PostsTableProps) {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {sortedAndFilteredData.map((post, idx) => (
+            {paginatedData.map((post, idx) => (
               <tr key={idx} className="hover:bg-gray-50">
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {new Date(post.date).toLocaleDateString()}
@@ -104,6 +124,20 @@ export default function PostsTable({ data }: PostsTableProps) {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="p-4 flex justify-between items-center">
+        <select value={postsPerPage} onChange={handlePostsPerPageChange} className="border rounded-md p-1">
+          {[10, 25, 50, 100].map((num) => (
+            <option key={num} value={num}>{num} publicaciones</option>
+          ))}
+        </select>
+        <div>
+          {Array.from({ length: Math.ceil(sortedAndFilteredData.length / postsPerPage) }, (_, index) => (
+            <button key={index} onClick={() => handlePageChange(index)} className={`mx-1 ${currentPage === index ? 'font-bold' : ''}`}>
+              {index + 1}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

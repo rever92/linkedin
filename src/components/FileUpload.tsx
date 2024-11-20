@@ -26,17 +26,23 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
       Papa.parse(file, {
         complete: async (results) => {
           try {
-            const posts = results.data.slice(1).map((row: any) => ({
-              url: row[0],
-              date: row[1],
-              text: row[2],
-              views: parseInt(row[3]) || 0,
-              likes: parseInt(row[4]) || 0,
-              comments: parseInt(row[5]) || 0,
-              shares: parseInt(row[6]) || 0,
-              post_type: row[7],
-              user_id: user.id
-            }));
+            const posts = results.data.slice(1).map((row: any) => {
+              const [datePart, timePart] = row[1].split(', ');
+              const [day, month, year] = datePart.split('/');
+              const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart}`;
+
+              return {
+                url: row[0],
+                date: isoDate,
+                text: row[2],
+                views: parseInt(row[3]) || 0,
+                likes: parseInt(row[4]) || 0,
+                comments: parseInt(row[5]) || 0,
+                shares: parseInt(row[6]) || 0,
+                post_type: row[7],
+                user_id: user.id
+              };
+            });
 
             const { error: upsertError } = await supabase
               .from('linkedin_posts')
