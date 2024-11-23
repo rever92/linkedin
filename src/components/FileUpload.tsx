@@ -26,26 +26,44 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
       Papa.parse(file, {
         complete: async (results) => {
           try {
-            const posts = results.data.slice(1).map((row: any) => ({
-              url: row[0],
-              date: row[1],
-              text: row[2],
-              views: parseInt(row[3]) || 0,
-              likes: parseInt(row[4]) || 0,
-              comments: parseInt(row[5]) || 0,
-              shares: parseInt(row[6]) || 0,
-              post_type: row[7],
-              user_id: user.id
-            }));
+            const posts = results.data.slice(1).map((row: any) => {
+              const [datePart, timePart] = row[1].split(', ');
+              const [day, month, year] = datePart.split('/');
+              const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart}`;
 
-            const { error: upsertError } = await supabase
-              .from('linkedin_posts')
-              .upsert(posts, {
-                onConflict: 'url',
-                ignoreDuplicates: false
-              });
+              return {
+                url: row[0],
+                date: isoDate,
+                text: row[2],
+                views: parseInt(row[3]) || 0,
+                likes: parseInt(row[4]) || 0,
+                comments: parseInt(row[5]) || 0,
+                shares: parseInt(row[6]) || 0,
+                post_type: row[7],
+                user_id: user.id
+              };
+            });
 
-            if (upsertError) throw upsertError;
+            for (const post of posts) {
+              const { error: upsertError } = await supabase
+                .from('linkedin_posts')
+                .upsert([{
+                  url: post.url,
+                  date: post.date,
+                  text: post.text,
+                  views: post.views,
+                  likes: post.likes,
+                  comments: post.comments,
+                  shares: post.shares,
+                  post_type: post.post_type,
+                  user_id: user.id
+                }], {
+                  onConflict: ['url'],
+                  ignoreDuplicates: false
+                });
+
+              if (upsertError) throw upsertError;
+            }
 
             const { data: updatedPosts, error: loadError } = await supabase
               .from('linkedin_posts')
