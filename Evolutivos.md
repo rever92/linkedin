@@ -13,6 +13,23 @@ El botón de enviar lote en Dashboard debe ser más visible, estar ubicado encim
 Paso 3
 Para un usuario que ya tenga datos en la bbdd, tiene que existir un botón que le permita volver a subir datos como en la funcionalidad inicial, pero en este caso se deberá hacer un cotejo de qué posts existen ya en la bbdd en base a la url, y  subir los que no existan, así como actualizar los campos views,	likes,	comments,	shares,	type de aquellos que ya existan.
 
+Paso 4
+En Dashboard, cuando un usuario suba un csv para actualizar sus datos, agregar un popup con un spinner y el texto "Actualizando tus datos" mientras se actualizan los posts, y mensaje de confirmación y un botón de "Actualiza para ver tus nuevos datos" que refresque la página.
+En FileUpload, hacer algo parecido también.
+
+Paso 5
+Añade entre las tarjetas de Posts y Visualizaciones una nueva que sea "Ratio de Engagement", que muestre el dato para el periodo filtrado de Interacciones/Visualizaciones
+Mostrar en cada tarjeta de datos (Posts, visualizaciones, reacciones, comentarios, compartidos, y ratio de engagement) una comparativa respecto a un periodo de igual duración pero anterior (es decir, si estoy viendo "esta semana" que me lo compare con los datos de la semana anterior). Los datos de la comparativa se deberían ver en la esquina superior derecha de la tarjeta, y mostrase con una flecha hacia arriba y en verde si son positivos, y con una flecha hacia abajo y en rojo si son negativos. 
+Además, debajo de cada indicador principal, sería interesante mostrar el ratio por publicación, es decir, las visualizaciones por publicación, reacciones por publicación, ... Esto debería visualizarse también dentro de la misma tarjeta, justo debajo del indicador principal, y en tamaño de fuente más pequeña.
+
+
+Paso 6
+Añade a la derecha del gráfico temporal, un gráfico que permita visualizar en un gráfico tipo tarta el reparto por tipo de publicación. Cada tipo debería mostrar un tooltip al pasar el ratón por encima, que permita visualizar el alcance promedio por tipo de post, la interacción promedia, y los comentarios promedios. 
+Debajo del gráfico y antes de la tabla, crea una pequeña tabla que muestre un listado con las categorías de los posts, el recuento de posts por cada categoría, el alcance promedio por categoría, la interacción promedia por categoría (sumando reacciones, comentarios, y compartidos), y la tasa de engagement por categoría (interacción total/visualizaciones). 
+Añade una columna a la tabla de publicaciones con el "Ratio de Engagement", que muestre el dato para el periodo filtrado de Interacciones/Visualizaciones de cada publicaciones
+
+Futuro
+Ampliar tamaño de lotes que se envían a la aPI
 
 Definición de la bbdd:
 CREATE TABLE categorization_events (

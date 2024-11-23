@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import FileUpload from './FileUpload';
 import { supabase } from '../lib/supabase';
 import Papa from 'papaparse';
+import { Oval } from 'react-loader-spinner';
 
 interface DashboardProps {
   data: LinkedInPost[];
@@ -26,6 +27,8 @@ export default function Dashboard({ data }: DashboardProps) {
   const [dateRange, setDateRange] = useState('thisMonth');
   const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
   const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
 
   const handleDateRangeChange = (range: string) => {
     setDateRange(range);
@@ -77,7 +80,7 @@ export default function Dashboard({ data }: DashboardProps) {
     return data.filter(post => {
       const postDate = new Date(post.date);
       return postDate >= startDate && postDate <= endDate;
-    });
+    }).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   };
 
   const filteredData = getFilteredData();
@@ -96,13 +99,34 @@ export default function Dashboard({ data }: DashboardProps) {
     setSelectedMetrics(prev => ({ ...prev, [metric]: !prev[metric] }));
   };
 
-  const chartData = filteredData.map(post => ({
-    date: new Date(post.date).toLocaleDateString(),
-    views: post.views,
-    likes: post.likes,
-    comments: post.comments,
-    shares: post.shares,
-  }));
+  const groupDataByWeek = (data: LinkedInPost[]) => {
+    const grouped: { [key: string]: LinkedInPost[] } = {};
+    data.forEach(post => {
+      const date = new Date(post.date);
+      const weekStart = new Date(date.setDate(date.getDate() - date.getDay())).toISOString().split('T')[0];
+      if (!grouped[weekStart]) {
+        grouped[weekStart] = [];
+      }
+      grouped[weekStart].push(post);
+    });
+    return Object.entries(grouped).map(([date, posts]) => ({
+      date,
+      views: posts.reduce((sum, post) => sum + post.views, 0),
+      likes: posts.reduce((sum, post) => sum + post.likes, 0),
+      comments: posts.reduce((sum, post) => sum + post.comments, 0),
+      shares: posts.reduce((sum, post) => sum + post.shares, 0),
+    }));
+  };
+
+  const chartData = dateRange === 'last3Months' || dateRange === 'last6Months' || dateRange === 'lastYear'
+    ? groupDataByWeek(filteredData)
+    : filteredData.map(post => ({
+        date: new Date(post.date).toLocaleDateString(),
+        views: post.views,
+        likes: post.likes,
+        comments: post.comments,
+        shares: post.shares,
+    })).filter(data => data.views > 0);
 
   const getBarColor = (metric: string) => {
     const colors = {
@@ -115,18 +139,53 @@ export default function Dashboard({ data }: DashboardProps) {
     return colors[metric as keyof typeof colors] || '#3b82f6';
   };
 
+  const extractDateFromPostId = (postId: string): string => {
+    try {
+      const timestamp = parseInt(BigInt(postId).toString(2).slice(0, 41), 2);
+      const date = new Date(timestamp);
+      return date.toISOString();
+    } catch (error) {
+      throw new Error('Error al extraer la fecha del ID del post');
+    }
+  };
+
   const handleFileUpload = async (file: File) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('No authenticated user found');
+
+    setLoading(true);
+    setUpdateMessage(null);
 
     const results = await new Promise((resolve, reject) => {
       Papa.parse(file, {
         complete: async (results) => {
           try {
             const posts = results.data.slice(1).map((row: any) => {
-              const [datePart, timePart] = row[1].split(', ');
-              const [day, month, year] = datePart.split('/');
-              const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart}`;
+              if (row.length === 0 || !row[0]) {
+                console.error('Fila vacía encontrada:', row);
+                return null;
+              }
+
+              let isoDate;
+              const url = row[0];
+
+              const postIdMatch = url.match(/(\d{19})/);
+              if (postIdMatch) {
+                const postId = postIdMatch[1];
+                isoDate = extractDateFromPostId(postId);
+              } else if (row[1]) {
+                const [datePart, timePart] = row[1].split(', ');
+                const [day, month, year] = datePart.split('/');
+                if (day && month && year && timePart) {
+                  isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart}`;
+                } else {
+                  console.error('Formato de fecha incorrecto en la fila:', row);
+                  throw new Error('No se pudo extraer la fecha del post');
+                }
+              } else {
+                console.error('No se encontró ID de post ni fecha en la fila:', row);
+                throw new Error('No se pudo extraer la fecha del post');
+              }
 
               return {
                 url: row[0],
@@ -139,7 +198,7 @@ export default function Dashboard({ data }: DashboardProps) {
                 post_type: row[7],
                 user_id: user.id
               };
-            });
+            }).filter(post => post !== null);
 
             for (const post of posts) {
               const { error: upsertError } = await supabase
@@ -155,7 +214,7 @@ export default function Dashboard({ data }: DashboardProps) {
                   post_type: post.post_type,
                   user_id: user.id
                 }], {
-                  onConflict: ['url'],
+                  onConflict: 'url',
                   ignoreDuplicates: false
                 });
 
@@ -170,8 +229,11 @@ export default function Dashboard({ data }: DashboardProps) {
             if (loadError) throw loadError;
 
             resolve(updatedPosts);
+            setUpdateMessage('Datos actualizados correctamente.');
           } catch (err: any) {
             reject(err);
+          } finally {
+            setLoading(false);
           }
         },
         header: false
@@ -299,13 +361,16 @@ export default function Dashboard({ data }: DashboardProps) {
               <CartesianGrid strokeDasharray="3 3" stroke="#ffffff" opacity={0.1} />
               <XAxis 
                 dataKey="date" 
-                stroke="#ffffff" 
-                tick={{ fontSize: 12, fill: '#ffffff' }} 
+                stroke="#000000"
+                tick={{ fontSize: 12, fill: '#000000' }}
                 domain={['dataMin', 'dataMax']}
-                tickFormatter={(date) => new Date(date).toLocaleDateString()}
+                tickFormatter={(date) => {
+                    const dateObj = new Date(date);
+                    return dateObj.getFullYear() >= 2022 ? dateObj.toLocaleDateString() : '';
+                }}
               />
-              <YAxis yAxisId="left" stroke="#ffffff" tick={{ fontSize: 12, fill: '#ffffff' }} />
-              <YAxis yAxisId="right" orientation="right" stroke="#ffffff" tick={{ fontSize: 12, fill: '#ffffff' }} />
+              <YAxis yAxisId="left" stroke="#000000" tick={{ fontSize: 12, fill: '#000000' }} />
+              <YAxis yAxisId="right" orientation="right" stroke="#000000" tick={{ fontSize: 12, fill: '#000000' }} />
               <Tooltip 
                 contentStyle={{ backgroundColor: '#333', border: 'none', borderRadius: '8px' }} 
                 itemStyle={{ color: '#ffffff' }} 
@@ -356,6 +421,24 @@ export default function Dashboard({ data }: DashboardProps) {
       </div>
 
       <PostsTable data={filteredData} />
+
+      {loading && (
+        <div className="fixed inset-0 flex items-center justify-center bg-gray-800 bg-opacity-50 z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <Spinner className="animate-spin h-10 w-10 text-blue-500" />
+            <p className="mt-2">Actualizando tus datos...</p>
+          </div>
+        </div>
+      )}
+
+      {updateMessage && (
+        <div className="mt-4 p-4 bg-green-100 text-green-800 rounded">
+          <p>{updateMessage}</p>
+          <button onClick={() => window.location.reload()} className="mt-2 px-4 py-2 bg-blue-500 text-white rounded">
+            Actualiza para ver tus nuevos datos
+          </button>
+        </div>
+      )}
     </div>
   );
 }

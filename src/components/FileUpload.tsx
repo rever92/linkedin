@@ -3,6 +3,7 @@ import Papa from 'papaparse';
 import { LinkedInPost } from '../types';
 import { supabase } from '../lib/supabase';
 import { useState } from 'react';
+import { Oval } from 'react-loader-spinner';
 
 interface FileUploadProps {
   onDataLoaded: (data: LinkedInPost[]) => void;
@@ -11,6 +12,21 @@ interface FileUploadProps {
 export default function FileUpload({ onDataLoaded }: FileUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+
+  const extractDateFromPostId = (postId: string): string => {
+    try {
+      const timestamp = parseInt(BigInt(postId).toString(2).slice(0, 41), 2);
+      const date = new Date(timestamp);
+      
+      // Formatear la fecha y hora en formato ISO
+      const isoDate = date.toISOString();
+      return isoDate;
+    } catch (error) {
+      throw new Error('Error al extraer la fecha del ID del post');
+    }
+  };
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -18,6 +34,8 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
 
     setUploading(true);
     setError(null);
+    setLoading(true);
+    setUpdateMessage(null);
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -27,12 +45,25 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
         complete: async (results) => {
           try {
             const posts = results.data.slice(1).map((row: any) => {
-              const [datePart, timePart] = row[1].split(', ');
-              const [day, month, year] = datePart.split('/');
-              const isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart}`;
+              let isoDate;
+              const url = row[0];
+              
+              // Extraer el ID de la publicación de la URL
+              const postIdMatch = url.match(/(\d{19})/);
+              if (postIdMatch) {
+                const postId = postIdMatch[1];
+                isoDate = extractDateFromPostId(postId);
+              } else if (row[1]) {
+                // Si hay fecha en el CSV, usar el formato anterior
+                const [datePart, timePart] = row[1].split(', ');
+                const [day, month, year] = datePart.split('/');
+                isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart}`;
+              } else {
+                throw new Error('No se pudo extraer la fecha del post');
+              }
 
               return {
-                url: row[0],
+                url: url,
                 date: isoDate,
                 text: row[2],
                 views: parseInt(row[3]) || 0,
@@ -58,7 +89,7 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
                   post_type: post.post_type,
                   user_id: user.id
                 }], {
-                  onConflict: ['url'],
+                  onConflict: 'url',
                   ignoreDuplicates: false
                 });
 
@@ -73,11 +104,12 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
             if (loadError) throw loadError;
 
             onDataLoaded(updatedPosts);
+            setUpdateMessage('Datos actualizados correctamente.');
           } catch (err: any) {
             setError(err.message);
             console.error('Error uploading data:', err);
           } finally {
-            setUploading(false);
+            setLoading(false);
           }
         },
         error: (err: any) => {
@@ -116,6 +148,24 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
           disabled={uploading}
         />
       </label>
+
+      {loading && (
+        <div className="fixed inset-0 flex items-center justify-center bg-gray-800 bg-opacity-50 z-50">
+          <div className="bg-white p-6 rounded-lg shadow-lg">
+            <Oval height={40} width={40} color="#00BFFF" secondaryColor="#00BFFF" />
+            <p className="mt-2">Actualizando tus datos...</p>
+          </div>
+        </div>
+      )}
+
+      {updateMessage && (
+        <div className="mt-4 p-4 bg-green-100 text-green-800 rounded">
+          <p>{updateMessage}</p>
+          <button onClick={() => window.location.reload()} className="mt-2 px-4 py-2 bg-blue-500 text-white rounded">
+            Actualiza para ver tus nuevos datos
+          </button>
+        </div>
+      )}
     </div>
   );
 }
