@@ -6,7 +6,7 @@ export interface LinkedInPost {
   likes: number;
   comments: number;
   shares: number;
-  type: string;
+  category?: string;
 }
 
 export interface DashboardStats {

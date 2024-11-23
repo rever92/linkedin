@@ -44,14 +44,26 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
               };
             });
 
-            const { error: upsertError } = await supabase
-              .from('linkedin_posts')
-              .upsert(posts, {
-                onConflict: 'url',
-                ignoreDuplicates: false
-              });
+            for (const post of posts) {
+              const { error: upsertError } = await supabase
+                .from('linkedin_posts')
+                .upsert([{
+                  url: post.url,
+                  date: post.date,
+                  text: post.text,
+                  views: post.views,
+                  likes: post.likes,
+                  comments: post.comments,
+                  shares: post.shares,
+                  post_type: post.post_type,
+                  user_id: user.id
+                }], {
+                  onConflict: ['url'],
+                  ignoreDuplicates: false
+                });
 
-            if (upsertError) throw upsertError;
+              if (upsertError) throw upsertError;
+            }
 
             const { data: updatedPosts, error: loadError } = await supabase
               .from('linkedin_posts')
