@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { LinkedInPost } from '../types';
 import { ChevronUp, ChevronDown, Search } from 'lucide-react';
 
@@ -6,12 +6,102 @@ interface PostsTableProps {
   data: LinkedInPost[];
 }
 
+const Pagination = ({ 
+  currentPage, 
+  totalPages, 
+  onPageChange 
+}: { 
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (page: number) => void;
+}) => {
+  const handlePageClick = (pageNumber: number | string) => {
+    if (typeof pageNumber === 'number') {
+      console.log('Cambiando a página:', pageNumber - 1);
+      onPageChange(pageNumber - 1);
+    }
+  };
+
+  const getPageNumbers = () => {
+    const delta = 2;
+    const pages = [];
+    const currentPageNumber = currentPage + 1;
+
+    // Siempre mostrar primera página
+    pages.push(1);
+
+    // Añadir puntos suspensivos si es necesario
+    if (currentPageNumber - delta > 2) {
+      pages.push('...');
+    }
+
+    // Calcular rango alrededor de la página actual
+    for (let i = Math.max(2, currentPageNumber - delta); 
+         i <= Math.min(totalPages - 1, currentPageNumber + delta); 
+         i++) {
+      pages.push(i);
+    }
+
+    // Añadir puntos suspensivos si es necesario
+    if (currentPageNumber + delta < totalPages - 1) {
+      pages.push('...');
+    }
+
+    // Siempre mostrar última página si hay más de una
+    if (totalPages > 1 && !pages.includes(totalPages)) {
+      pages.push(totalPages);
+    }
+
+    return pages;
+  };
+
+  return (
+    <nav className="flex items-center gap-2" aria-label="Pagination">
+      <button
+        type="button"
+        onClick={() => onPageChange(currentPage - 1)}
+        disabled={currentPage === 0}
+        className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+      >
+        Anterior
+      </button>
+      
+      {getPageNumbers().map((pageNumber, index) => (
+        <button
+          key={index}
+          type="button"
+          onClick={() => handlePageClick(pageNumber)}
+          className={`px-3 py-1 rounded ${
+            pageNumber === currentPage + 1
+              ? 'bg-blue-500 text-white'
+              : typeof pageNumber === 'number'
+              ? 'hover:bg-gray-100'
+              : ''
+          }`}
+          disabled={typeof pageNumber !== 'number'}
+        >
+          {pageNumber}
+        </button>
+      ))}
+
+      <button
+        type="button"
+        onClick={() => onPageChange(currentPage + 1)}
+        disabled={currentPage >= totalPages - 1}
+        className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+      >
+        Siguiente
+      </button>
+    </nav>
+  );
+};
+
 export default function PostsTable({ data }: PostsTableProps) {
   const [sortField, setSortField] = useState<keyof LinkedInPost>('date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
-  const [postsPerPage, setPostsPerPage] = useState(25);
+  const [postsPerPage, setPostsPerPage] = useState(10);
 
   const filteredData = useMemo(() => {
     return data.filter(post => post.text.trim() !== '');
@@ -29,19 +119,20 @@ export default function PostsTable({ data }: PostsTableProps) {
             : new Date(b.date).getTime() - new Date(a.date).getTime();
         }
         
-        const aValue = a[sortField];
-        const bValue = b[sortField];
+        const aValue = String(a[sortField] || '');
+        const bValue = String(b[sortField] || '');
         
         if (sortDirection === 'asc') {
-          return aValue > bValue ? 1 : -1;
+          return aValue.localeCompare(bValue);
         }
-        return aValue < bValue ? 1 : -1;
+        return bValue.localeCompare(aValue);
       });
   }, [filteredData, sortField, sortDirection, searchTerm]);
 
   const paginatedData = useMemo(() => {
     const startIndex = currentPage * postsPerPage;
-    return sortedAndFilteredData.slice(startIndex, startIndex + postsPerPage);
+    const endIndex = startIndex + postsPerPage;
+    return sortedAndFilteredData.slice(startIndex, endIndex);
   }, [sortedAndFilteredData, currentPage, postsPerPage]);
 
   const handleSort = (field: keyof LinkedInPost) => {
@@ -58,14 +149,27 @@ export default function PostsTable({ data }: PostsTableProps) {
     return sortDirection === 'asc' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />;
   };
 
-  const handlePageChange = (page: number) => {
-    setCurrentPage(page);
+  const handlePageChange = (newPage: number) => {
+    console.log('Cambiando a página:', newPage);
+    if (newPage >= 0 && newPage < Math.ceil(sortedAndFilteredData.length / postsPerPage)) {
+      setCurrentPage(newPage);
+    }
   };
 
   const handlePostsPerPageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setPostsPerPage(Number(event.target.value));
     setCurrentPage(0);
   };
+
+  useEffect(() => {
+    console.log({
+      currentPage,
+      totalPages: Math.ceil(sortedAndFilteredData.length / postsPerPage),
+      totalPosts: sortedAndFilteredData.length,
+      postsPerPage,
+      paginatedDataLength: paginatedData.length
+    });
+  }, [currentPage, postsPerPage, sortedAndFilteredData]);
 
   return (
     <div className="bg-white rounded-lg shadow">
@@ -85,15 +189,22 @@ export default function PostsTable({ data }: PostsTableProps) {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              {['fecha', 'texto', 'visualizaciones', 'reacciones', 'comentarios', 'compartidos'].map((field) => (
+              {[
+                { key: 'date', label: 'Fecha' },
+                { key: 'text', label: 'Texto' },
+                { key: 'views', label: 'Visualizaciones' },
+                { key: 'likes', label: 'Reacciones' },
+                { key: 'comments', label: 'Comentarios' },
+                { key: 'shares', label: 'Compartidos' }
+              ].map(({ key, label }) => (
                 <th
-                  key={field}
-                  onClick={() => handleSort(field as keyof LinkedInPost)}
+                  key={key}
+                  onClick={() => handleSort(key as keyof LinkedInPost)}
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
                 >
                   <div className="flex items-center space-x-1">
-                    <span>{field.charAt(0).toUpperCase() + field.slice(1)}</span>
-                    <SortIcon field={field as keyof LinkedInPost} />
+                    <span>{label}</span>
+                    <SortIcon field={key as keyof LinkedInPost} />
                   </div>
                 </th>
               ))}
@@ -129,18 +240,21 @@ export default function PostsTable({ data }: PostsTableProps) {
         </table>
       </div>
       <div className="p-4 flex justify-between items-center">
-        <select value={postsPerPage} onChange={handlePostsPerPageChange} className="border rounded-md p-1">
+        <select 
+          value={postsPerPage} 
+          onChange={handlePostsPerPageChange} 
+          className="border rounded-md p-1"
+        >
           {[10, 25, 50, 100].map((num) => (
             <option key={num} value={num}>{num} publicaciones</option>
           ))}
         </select>
-        <div>
-          {Array.from({ length: Math.ceil(sortedAndFilteredData.length / postsPerPage) }, (_, index) => (
-            <button key={index} onClick={() => handlePageChange(index)} className={`mx-1 ${currentPage === index ? 'font-bold' : ''}`}>
-              {index + 1}
-            </button>
-          ))}
-        </div>
+        
+        <Pagination
+          currentPage={currentPage}
+          totalPages={Math.ceil(sortedAndFilteredData.length / postsPerPage)}
+          onPageChange={handlePageChange}
+        />
       </div>
     </div>
   );

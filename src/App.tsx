@@ -6,6 +6,9 @@ import { LineChart } from 'lucide-react';
 import { supabase } from './lib/supabase';
 import Auth from './components/Auth';
 import LandingPage from './components/LandingPage';
+import Sidebar from './components/Sidebar';
+import { Session } from '@supabase/supabase-js';
+import { sendAuthToExtension, checkExtensionSync } from './lib/extensionCommunication';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -141,7 +144,7 @@ async function fetchCategoriesForNewPosts(posts: LinkedInPost[]) {
 
 export default function App() {
   const [data, setData] = useState<LinkedInPost[]>([]);
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [showAuth, setShowAuth] = useState(false);
   const dataLoadedRef = useRef(false);
   const [canSubmit, setCanSubmit] = useState(true);
@@ -149,10 +152,12 @@ export default function App() {
   const [lastSubmissionTime, setLastSubmissionTime] = useState<Date | null>(null);
   const [postsToProcess, setPostsToProcess] = useState<LinkedInPost[]>([]);
   const [waitTime, setWaitTime] = useState<number>(0);
+  const [currentView, setCurrentView] = useState('dashboard');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
+      sendAuthToExtension(session);
       if (session && !dataLoadedRef.current) {
         loadUserData();
         checkSubmissionLimit();
@@ -163,14 +168,25 @@ export default function App() {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
+      sendAuthToExtension(session);
       if (session && !dataLoadedRef.current) {
         loadUserData();
         checkSubmissionLimit();
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    // Verificar sincronización cada 5 minutos
+    const syncInterval = setInterval(() => {
+      if (session) {
+        checkExtensionSync(session);
+      }
+    }, 5 * 60 * 1000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearInterval(syncInterval);
+    };
+  }, [session]);
 
   const checkSubmissionLimit = async () => {
     if (!session) return;
@@ -248,38 +264,19 @@ export default function App() {
     }
   };
 
-  if (!session) {
-    if (showAuth) {
-      return <Auth />;
+  const renderContent = () => {
+    if (data.length === 0) {
+      return <FileUpload onDataLoaded={setData} />;
     }
-    return <LandingPage onLogin={() => setShowAuth(true)} />;
-  }
 
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <LineChart className="w-8 h-8 text-blue-500" />
-              <h1 className="text-3xl font-bold text-gray-900">
-                LinkedIn Analytics Dashboard
-              </h1>
-            </div>
-            <button
-              onClick={() => supabase.auth.signOut()}
-              className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900"
-            >
-              Sign Out
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {data.length === 0 ? (
-          <FileUpload onDataLoaded={setData} />
-        ) : (
+    switch (currentView) {
+      case 'upload':
+        return <FileUpload onDataLoaded={setData} />;
+      case 'posts':
+        return <PostsTable data={data} />;
+      case 'dashboard':
+      default:
+        return (
           <>
             <Dashboard data={data} />
             <div className="flex justify-end mb-4">
@@ -300,8 +297,43 @@ export default function App() {
               </div>
             )}
           </>
-        )}
-      </main>
+        );
+    }
+  };
+
+  if (!session) {
+    if (showAuth) {
+      return <Auth />;
+    }
+    return <LandingPage onLogin={() => setShowAuth(true)} />;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex">
+      <Sidebar onNavigate={setCurrentView} currentView={currentView} />
+      
+      <div className="flex-1 transition-all duration-300 lg:ml-20">
+        <header className="bg-white shadow">
+          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-center">
+              <div className="flex items-center space-x-2">
+                <LineChart className="w-8 h-8 text-blue-500" />
+                <h1 className="text-3xl font-bold text-gray-900">
+                  LinkedIn Analytics Dashboard
+                </h1>
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+          {data.length === 0 ? (
+            <FileUpload onDataLoaded={setData} />
+          ) : (
+            renderContent()
+          )}
+        </main>
+      </div>
     </div>
   );
 }

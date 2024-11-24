@@ -7,6 +7,7 @@ export interface LinkedInPost {
   comments: number;
   shares: number;
   category?: string;
+  user_id: string;
 }
 
 export interface DashboardStats {

@@ -28,8 +28,24 @@ Añade a la derecha del gráfico temporal, un gráfico que permita visualizar en
 Debajo del gráfico y antes de la tabla, crea una pequeña tabla que muestre un listado con las categorías de los posts, el recuento de posts por cada categoría, el alcance promedio por categoría, la interacción promedia por categoría (sumando reacciones, comentarios, y compartidos), y la tasa de engagement por categoría (interacción total/visualizaciones). 
 Añade una columna a la tabla de publicaciones con el "Ratio de Engagement", que muestre el dato para el periodo filtrado de Interacciones/Visualizaciones de cada publicaciones
 
-Futuro
-Ampliar tamaño de lotes que se envían a la aPI
+Futuros pasos
+Ampliar tamaño de lotes que se envían a la API de Google a 30
+
+Nuevos análisis
+Mejor y peor día/hora para publicar basado en engagement
+Estacionalidad en el engagement (¿hay meses/períodos mejores?)
+Longitud óptima de los posts (correlación entre extensión y engagement)
+Gráfico de correlación entre longitud y engagement
+Nube de palabras clave más efectivas
+Tasa de crecimiento de seguidores -> Dato que habrá que meter a mano
+
+Nuevo apartado -> Generador de contenido en base a IA Generativa y a tus posts con mejor engagement.
+Formulario en el que elijes
+    -Categoría (en base a las categorías de los posts)
+    -Tema de referencia (te deja meter un campo de texto explicando de qué quieres hablar, e incluso pegar un artículo)
+    -Envias eso a la API junto con ejemplos de tus top 20 posts de esa categoría y con el prompt para generar contenido, y te vevuelve un post y un prompt para una imagen con IA
+
+
 
 Definición de la bbdd:
 CREATE TABLE categorization_events (
