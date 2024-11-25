@@ -1,15 +1,76 @@
+/* index.css */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@layer base {
+  body {
+    @apply font-sans bg-background text-foreground;
+  }
+  :root {
+    --background: #FFFFFF;
+    --foreground: #000000;
+    --card: #FFFFFF;
+    --card-foreground: #000000;
+    --popover: #FFFFFF;
+    --popover-foreground: #000000;
+    --primary: #0a66c2; /* Color principal que mencionaste */
+    --primary-foreground: #FFFFFF;
+    --secondary: #4ECDC4; /* Puedes ajustar estos colores */
+    --secondary-foreground: #FFFFFF;
+    --muted: #F0F0F0;
+    --muted-foreground: #666666;
+    --accent: #4ECDC4;
+    --accent-foreground: #FFFFFF;
+    --destructive: #FF6B6B;
+    --destructive-foreground: #FFFFFF;
+    --border: #CCCCCC;
+    --input: #FFFFFF;
+    --ring: #E85B4E;
+    --radius: 0.5rem;
+    /* Colores para el gráfico */
+    --chart-1: #E85B4E;
+    --chart-2: #FF8C7C;
+    --chart-3: #FF6B6B;
+    --chart-4: #FFE8E6;
+    --chart-5: #4ECDC4;
+  }
+
+  .dark {
+    --background: #1A1A1A;
+    --foreground: #FFFFFF;
+    --card: #1A1A1A;
+    --card-foreground: #FFFFFF;
+    --popover: #1A1A1A;
+    --popover-foreground: #FFFFFF;
+    --primary: #4ECDC4; /* Color principal para el tema oscuro */
+    --primary-foreground: #FFFFFF;
+    --secondary: #3B9B94;
+    --secondary-foreground: #FFFFFF;
+    --muted: #2D2D2D;
+    --muted-foreground: #CCCCCC;
+    --accent: #FF6B6B;
+    --accent-foreground: #FFFFFF;
+    --destructive: #FF6B6B;
+    --destructive-foreground: #FFFFFF;
+    --border: #333333;
+    --input: #2D2D2D;
+    --ring: #4ECDC4;
+    /* Colores para el gráfico */
+    --chart-1: #4ECDC4;
+    --chart-2: #45B7D1;
+    --chart-3: #96CEB4;
+    --chart-4: #FFEEAD;
+    --chart-5: #FF6B6B;
+  }
 }
 
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
 }

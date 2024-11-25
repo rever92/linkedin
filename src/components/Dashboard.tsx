@@ -1,21 +1,32 @@
+'use client';
 import { useState, useEffect } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { LinkedInPost, DashboardStats } from '../types';
-import { Activity, ThumbsUp, MessageCircle, Share2, Eye } from 'lucide-react';
-import MetricSelector from './MetricSelector';
-import PostsTable from './PostsTable';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
-import './Dashboard.css';
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell
+} from 'recharts';
+import { Activity, Eye, Heart, MessageCircle, Share2, BarChart3 } from 'lucide-react';
 import { format } from 'date-fns';
-import FileUpload from './FileUpload';
+import { DateRange } from 'react-day-picker';
+import { cn } from "../lib/utils";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from "@/components/ui/select";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+} from "@/components/ui/table";
 import { supabase } from '../lib/supabase';
 import Papa from 'papaparse';
-import { Oval } from 'react-loader-spinner';
+import { Spinner } from './Spinner';
+import { LinkedInPost, DashboardStats } from '../types';
+import PostsTable from './PostsTable';
 
 interface DashboardProps {
   data: LinkedInPost[];
 }
+
 
 export default function Dashboard({ data }: DashboardProps) {
   const [selectedMetrics, setSelectedMetrics] = useState({
@@ -25,8 +36,10 @@ export default function Dashboard({ data }: DashboardProps) {
     shares: false,
   });
   const [dateRange, setDateRange] = useState('thisMonth');
-  const [customStartDate, setCustomStartDate] = useState<Date | null>(null);
-  const [customEndDate, setCustomEndDate] = useState<Date | null>(null);
+  const [date, setDate] = useState<DateRange | undefined>({
+    from: new Date(),
+    to: new Date(),
+  });
   const [loading, setLoading] = useState(false);
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
   const [categoryData, setCategoryData] = useState<Array<{
@@ -50,21 +63,20 @@ export default function Dashboard({ data }: DashboardProps) {
   }>>([]);
 
   const COLORS = [
-    '#FF6B6B', // coral
-    '#4ECDC4', // turquesa
-    '#45B7D1', // azul claro
-    '#96CEB4', // verde menta
-    '#FFEEAD', // amarillo claro
-    '#D4A5A5', // rosa antiguo
-    '#9FA4C4', // lavanda
-    '#B5EAD7'  // verde agua
+    '#4ECDC4', // Primary coral
+    '#6be5dd', // Light coral
+    '#9ffbf5', // Medium coral
+    '#bff1ed', // Very light coral
+    '#4ECDC4', // Additional colors if needed
+    '#45B7D1',
+    '#96CEB4',
+    '#FFEEAD',
   ];
 
   const handleDateRangeChange = (range: string) => {
     setDateRange(range);
-    if (range === 'custom') {
-      setCustomStartDate(null);
-      setCustomEndDate(null);
+    if (range !== 'custom') {
+      setDate(undefined);
     }
   };
 
@@ -74,48 +86,48 @@ export default function Dashboard({ data }: DashboardProps) {
     let endDate: Date = now;
 
     switch (dateRange) {
-        case 'last7Days':
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 7);
-            break;
-        case 'last28Days':
-            startDate = new Date(now);
-            startDate.setDate(now.getDate() - 28);
-            break;
-        case 'thisMonth':
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-            break;
-        case 'lastMonth':
-            startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            endDate = new Date(now.getFullYear(), now.getMonth(), 0);
-            break;
-        case 'last3Months':
-            startDate = new Date(now);
-            startDate.setMonth(now.getMonth() - 3);
-            break;
-        case 'last6Months':
-            startDate = new Date(now);
-            startDate.setMonth(now.getMonth() - 6);
-            break;
-        case 'lastYear':
-            startDate = new Date(now);
-            startDate.setFullYear(now.getFullYear() - 1);
-            break;
-        case 'allTime':
-            startDate = new Date(0);
-            endDate = now;
-            break;
-        case 'custom':
-            startDate = customStartDate || new Date(0);
-            endDate = customEndDate || now;
-            break;
-        default:
-            startDate = new Date(0);
+      case 'last7Days':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case 'last28Days':
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - 28);
+        break;
+      case 'thisMonth':
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        break;
+      case 'lastMonth':
+        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        endDate = new Date(now.getFullYear(), now.getMonth(), 0);
+        break;
+      case 'last3Months':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 3);
+        break;
+      case 'last6Months':
+        startDate = new Date(now);
+        startDate.setMonth(now.getMonth() - 6);
+        break;
+      case 'lastYear':
+        startDate = new Date(now);
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      case 'allTime':
+        startDate = new Date(0);
+        endDate = now;
+        break;
+      case 'custom':
+        startDate = date?.from || new Date(0);
+        endDate = date?.to || now;
+        break;
+      default:
+        startDate = new Date(0);
     }
 
     return data.filter(post => {
-        const postDate = new Date(post.date);
-        return postDate >= startDate && postDate <= endDate;
+      const postDate = new Date(post.date);
+      return postDate >= startDate && postDate <= endDate;
     });
   };
 
@@ -127,7 +139,7 @@ export default function Dashboard({ data }: DashboardProps) {
     totalLikes: filteredData.reduce((sum, post) => sum + post.likes, 0),
     totalComments: filteredData.reduce((sum, post) => sum + post.comments, 0),
     totalShares: filteredData.reduce((sum, post) => sum + post.shares, 0),
-    avgEngagementRate: (filteredData.reduce((sum, post) => 
+    avgEngagementRate: (filteredData.reduce((sum, post) =>
       sum + ((post.likes + post.comments + post.shares) / post.views) * 100, 0) / filteredData.length) || 0
   };
 
@@ -148,94 +160,95 @@ export default function Dashboard({ data }: DashboardProps) {
     let previousEndDate: Date;
 
     switch (dateRange) {
-        case 'last7Days':
-            // Periodo actual: últimos 7 días
-            currentStartDate = new Date(now);
-            currentStartDate.setDate(now.getDate() - 7);
-            // Periodo anterior: 7 días anteriores a los últimos 7 días
-            previousStartDate = new Date(currentStartDate);
-            previousStartDate.setDate(currentStartDate.getDate() - 7);
-            previousEndDate = new Date(currentStartDate);
-            previousEndDate.setDate(previousEndDate.getDate() - 1);
-            break;
-        case 'last28Days':
-            // Periodo actual: últimos 28 días
-            currentStartDate = new Date(now);
-            currentStartDate.setDate(now.getDate() - 28);
-            // Periodo anterior: 28 días anteriores a los últimos 28 días
-            previousStartDate = new Date(currentStartDate);
-            previousStartDate.setDate(currentStartDate.getDate() - 28);
-            previousEndDate = new Date(currentStartDate);
-            previousEndDate.setDate(previousEndDate.getDate() - 1);
-            break;
-        case 'thisMonth':
-            // Periodo actual: mes actual
-            currentStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
-            // Periodo anterior: mes anterior
-            previousStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            previousEndDate = new Date(now.getFullYear(), now.getMonth(), 0);
-            break;
-        case 'lastMonth':
-            // Periodo actual: mes anterior
-            currentStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            currentEndDate = new Date(now.getFullYear(), now.getMonth(), 0);
-            // Periodo anterior: dos meses atrás
-            previousStartDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
-            previousEndDate = new Date(now.getFullYear(), now.getMonth() - 1, 0);
-            break;
-        case 'last3Months':
-            // Periodo actual: últimos 3 meses
-            currentStartDate = new Date(now);
-            currentStartDate.setMonth(now.getMonth() - 3);
-            // Periodo anterior: 3 meses anteriores a los últimos 3 meses
-            previousStartDate = new Date(currentStartDate);
-            previousStartDate.setMonth(currentStartDate.getMonth() - 3);
-            previousEndDate = new Date(currentStartDate);
-            previousEndDate.setDate(previousEndDate.getDate() - 1);
-            break;
-        case 'last6Months':
-            // Periodo actual: últimos 6 meses
-            currentStartDate = new Date(now);
-            currentStartDate.setMonth(now.getMonth() - 6);
-            // Periodo anterior: 6 meses anteriores a los últimos 6 meses
-            previousStartDate = new Date(currentStartDate);
-            previousStartDate.setMonth(currentStartDate.getMonth() - 6);
-            previousEndDate = new Date(currentStartDate);
-            previousEndDate.setDate(previousEndDate.getDate() - 1);
-            break;
-        case 'lastYear':
-            // Periodo actual: último año
-            currentStartDate = new Date(now);
-            currentStartDate.setFullYear(now.getFullYear() - 1);
-            // Periodo anterior: año anterior al último año
-            previousStartDate = new Date(currentStartDate);
-            previousStartDate.setFullYear(currentStartDate.getFullYear() - 1);
-            previousEndDate = new Date(currentStartDate);
-            previousEndDate.setDate(previousEndDate.getDate() - 1);
-            break;
-        case 'custom':
-            if (customStartDate && customEndDate) {
-                const diffTime = Math.abs(customEndDate.getTime() - customStartDate.getTime());
-                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                
-                currentStartDate = customStartDate;
-                currentEndDate = customEndDate;
-                
-                previousEndDate = new Date(customStartDate);
-                previousEndDate.setDate(previousEndDate.getDate() - 1);
-                previousStartDate = new Date(previousEndDate);
-                previousStartDate.setDate(previousStartDate.getDate() - diffDays);
-            } else {
-                return [];
-            }
-            break;
-        default:
-            return [];
+      case 'last7Days':
+        // Periodo actual: últimos 7 días
+        currentStartDate = new Date(now);
+        currentStartDate.setDate(now.getDate() - 7);
+        // Periodo anterior: 7 días anteriores a los últimos 7 días
+        previousStartDate = new Date(currentStartDate);
+        previousStartDate.setDate(currentStartDate.getDate() - 7);
+        previousEndDate = new Date(currentStartDate);
+        previousEndDate.setDate(previousEndDate.getDate() - 1);
+        break;
+      case 'last28Days':
+        // Periodo actual: últimos 28 días
+        currentStartDate = new Date(now);
+        currentStartDate.setDate(now.getDate() - 28);
+        // Periodo anterior: 28 días anteriores a los últimos 28 días
+        previousStartDate = new Date(currentStartDate);
+        previousStartDate.setDate(currentStartDate.getDate() - 28);
+        previousEndDate = new Date(currentStartDate);
+        previousEndDate.setDate(previousEndDate.getDate() - 1);
+        break;
+      case 'thisMonth':
+        // Periodo actual: mes actual
+        currentStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        // Periodo anterior: mes anterior
+        previousStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        previousEndDate = new Date(now.getFullYear(), now.getMonth(), 0);
+        break;
+      case 'lastMonth':
+        // Periodo actual: mes anterior
+        currentStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        currentEndDate = new Date(now.getFullYear(), now.getMonth(), 0);
+        // Periodo anterior: dos meses atrás
+        previousStartDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+        previousEndDate = new Date(now.getFullYear(), now.getMonth() - 1, 0);
+        break;
+      case 'last3Months':
+        // Periodo actual: últimos 3 meses
+        currentStartDate = new Date(now);
+        currentStartDate.setMonth(now.getMonth() - 3);
+        // Periodo anterior: 3 meses anteriores a los últimos 3 meses
+        previousStartDate = new Date(currentStartDate);
+        previousStartDate.setMonth(currentStartDate.getMonth() - 3);
+        previousEndDate = new Date(currentStartDate);
+        previousEndDate.setDate(previousEndDate.getDate() - 1);
+        break;
+      case 'last6Months':
+        // Periodo actual: últimos 6 meses
+        currentStartDate = new Date(now);
+        currentStartDate.setMonth(now.getMonth() - 6);
+        // Periodo anterior: 6 meses anteriores a los últimos 6 meses
+        previousStartDate = new Date(currentStartDate);
+        previousStartDate.setMonth(currentStartDate.getMonth() - 6);
+        previousEndDate = new Date(currentStartDate);
+        previousEndDate.setDate(previousEndDate.getDate() - 1);
+        break;
+      case 'lastYear':
+        // Periodo actual: último año
+        currentStartDate = new Date(now);
+        currentStartDate.setFullYear(now.getFullYear() - 1);
+        // Periodo anterior: año anterior al último año
+        previousStartDate = new Date(currentStartDate);
+        previousStartDate.setFullYear(currentStartDate.getFullYear() - 1);
+        previousEndDate = new Date(currentStartDate);
+        previousEndDate.setDate(previousEndDate.getDate() - 1);
+        break;
+      case 'custom':
+        if (date?.from && date?.to) {
+          const diffTime = Math.abs(date.to.getTime() - date.from.getTime());
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+          currentStartDate = date.from;
+          currentEndDate = date.to;
+
+          previousEndDate = new Date(date.from);
+          previousEndDate.setDate(previousEndDate.getDate() - 1);
+          previousStartDate = new Date(previousEndDate);
+          previousStartDate.setDate(previousStartDate.getDate() - diffDays);
+        } else {
+          return [];
+        }
+        break;
+
+      default:
+        return [];
     }
 
     return data.filter(post => {
-        const postDate = new Date(post.date);
-        return postDate >= previousStartDate && postDate <= previousEndDate;
+      const postDate = new Date(post.date);
+      return postDate >= previousStartDate && postDate <= previousEndDate;
     });
   };
 
@@ -265,33 +278,33 @@ export default function Dashboard({ data }: DashboardProps) {
   const groupDataByWeek = (data: LinkedInPost[]) => {
     const grouped: { [key: string]: LinkedInPost[] } = {};
     data.forEach(post => {
-        const date = new Date(post.date);
-        const weekStart = new Date(date);
-        weekStart.setDate(date.getDate() - date.getDay());
-        const formattedDate = weekStart.toISOString().split('T')[0];
-        
-        if (!grouped[formattedDate]) {
-            grouped[formattedDate] = [];
-        }
-        grouped[formattedDate].push(post);
+      const date = new Date(post.date);
+      const weekStart = new Date(date);
+      weekStart.setDate(date.getDate() - date.getDay());
+      const formattedDate = weekStart.toISOString().split('T')[0];
+
+      if (!grouped[formattedDate]) {
+        grouped[formattedDate] = [];
+      }
+      grouped[formattedDate].push(post);
     });
     return Object.entries(grouped).map(([date, posts]) => ({
-        date: new Date(date).toISOString(),
-        views: posts.reduce((sum, post) => sum + post.views, 0),
-        likes: posts.reduce((sum, post) => sum + post.likes, 0),
-        comments: posts.reduce((sum, post) => sum + post.comments, 0),
-        shares: posts.reduce((sum, post) => sum + post.shares, 0),
+      date: new Date(date).toISOString(),
+      views: posts.reduce((sum, post) => sum + post.views, 0),
+      likes: posts.reduce((sum, post) => sum + post.likes, 0),
+      comments: posts.reduce((sum, post) => sum + post.comments, 0),
+      shares: posts.reduce((sum, post) => sum + post.shares, 0),
     }));
   };
 
   const chartData = (dateRange === 'last3Months' || dateRange === 'last6Months' || dateRange === 'lastYear'
     ? groupDataByWeek(filteredData)
     : filteredData.map(post => ({
-        date: new Date(post.date).toISOString(),
-        views: post.views,
-        likes: post.likes,
-        comments: post.comments,
-        shares: post.shares,
+      date: new Date(post.date).toISOString(),
+      views: post.views,
+      likes: post.likes,
+      comments: post.comments,
+      shares: post.shares,
     })))
     .filter(data => data.views > 0)
     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -455,7 +468,7 @@ export default function Dashboard({ data }: DashboardProps) {
         shares: number;
       }
     } = {};
-    
+
     filteredData.forEach(post => {
       const category = post.category || 'Sin categoría';
       if (!categories[category]) {
@@ -492,7 +505,7 @@ export default function Dashboard({ data }: DashboardProps) {
         shares: number;
       }
     } = {};
-    
+
     filteredData.forEach(post => {
       const postType = post.post_type || 'Sin tipo';
       if (!postTypes[postType]) {
@@ -547,308 +560,346 @@ export default function Dashboard({ data }: DashboardProps) {
       }
     });
 
-  const totalPosts = data.length; // Total de posts a procesar
-  const totalBatches = Math.ceil(totalPosts / BATCH_SIZE); // Calcular el total de lotes
+  // const totalPosts = data.length; // Total de posts a procesar
+  // const totalBatches = Math.ceil(totalPosts / BATCH_SIZE); // Calcular el total de lotes
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-semibold">Rendimiento en el tiempo</h3>
-      </div>
-
-      <div className="flex justify-between items-center mb-4">
-        <select value={dateRange} onChange={(e) => handleDateRangeChange(e.target.value)} className="border rounded-md p-1">
-          <option value="last7Days">Últimos 7 días</option>
-          <option value="last28Days">Últimos 28 días</option>
-          <option value="thisMonth">Este mes</option>
-          <option value="lastMonth">El mes pasado</option>
-          <option value="last3Months">Últimos 3 meses</option>
-          <option value="last6Months">Últimos 6 meses</option>
-          <option value="lastYear">Último año</option>
-          <option value="allTime">Todo el tiempo</option>
-          <option value="custom">Personalizado</option>
-        </select>
-        {dateRange === 'custom' && (
-          <div className="flex space-x-2">
-            <DatePicker
-              selected={customStartDate}
-              onChange={(date) => setCustomStartDate(date)}
-              placeholderText="Fecha de inicio"
-            />
-            <DatePicker
-              selected={customEndDate}
-              onChange={(date) => setCustomEndDate(date)}
-              placeholderText="Fecha de fin"
-            />
+    <div className={`space-y-8 p-8 ${document.body.classList.contains('dark') ? 'bg-background' : 'bg-background'}`}>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Analytics Dashboard</h1>
+          <div className="flex items-center gap-4">
+            <Select value={dateRange} onValueChange={handleDateRangeChange}>
+              <SelectTrigger className="w-[180px] bg-white">
+                <SelectValue placeholder="Select date range" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="last7Days">Last 7 days</SelectItem>
+                <SelectItem value="last28Days">Last 28 days</SelectItem>
+                <SelectItem value="thisMonth">This month</SelectItem>
+                <SelectItem value="lastMonth">Last month</SelectItem>
+                <SelectItem value="last3Months">Last 3 months</SelectItem>
+                <SelectItem value="last6Months">Last 6 months</SelectItem>
+                <SelectItem value="lastYear">Last year</SelectItem>
+                <SelectItem value="allTime">All time</SelectItem>
+                <SelectItem value="custom">Custom range</SelectItem>
+              </SelectContent>
+            </Select>
+            {dateRange === 'custom' && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="bg-white"
+                  >
+                    {date?.from ? (
+                      date.to ? (
+                        <>
+                          {format(date.from, "LLL dd, y")} - {format(date.to, "LLL dd, y")}
+                        </>
+                      ) : (
+                        format(date.from, "LLL dd, y")
+                      )
+                    ) : (
+                      "Pick dates"
+                    )}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <Calendar
+                    initialFocus
+                    mode="range"
+                    defaultMonth={date?.from}
+                    selected={date}
+                    onSelect={setDate}
+                    numberOfMonths={2}
+                    className="bg-white"
+                  />
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
-        )}
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+          <MetricCard
+            title="Posts"
+            value={stats.totalPosts.toString()}
+            change={`${postsComparison > 0 ? '+' : ''}${postsComparison}`}
+            trend={postsComparison >= 0 ? 'up' : 'down'}
+            icon={<Activity className="h-4 w-4 text-primary" />}
+          />
+          <MetricCard
+            title="Visualizaciones"
+            value={stats.totalViews.toLocaleString()}
+            change={`${viewsComparison > 0 ? '+' : ''}${viewsComparison.toLocaleString()}`}
+            trend={viewsComparison >= 0 ? 'up' : 'down'}
+            icon={<Eye className="h-4 w-4 text-primary" />}
+            subtitle={`${viewsPerPost.toFixed(2)}/post`}
+          />
+
+          <MetricCard
+            title="% Engagement"
+            value={`${engagementRate.toFixed(2)}%`}
+            change={`${engagementRateComparison > 0 ? '+' : ''}${engagementRateComparison.toFixed(2)}%`}
+            trend={engagementRateComparison >= 0 ? 'up' : 'down'}
+            icon={<BarChart3 className="h-4 w-4 text-primary" />}
+          />
+
+          <MetricCard
+            title="Reacciones"
+            value={stats.totalLikes.toLocaleString()}
+            change={`${likesComparison > 0 ? '+' : ''}${likesComparison}`}
+            trend={likesComparison >= 0 ? 'up' : 'down'}
+            icon={<Heart className="h-4 w-4 text-primary" />}
+            subtitle={`${likesPerPost.toFixed(2)}/post`}
+          />
+
+          <MetricCard
+            title="Comentarios"
+            value={stats.totalComments.toLocaleString()}
+            change={`${commentsComparison > 0 ? '+' : ''}${commentsComparison}`}
+            trend={commentsComparison >= 0 ? 'up' : 'down'}
+            icon={<MessageCircle className="h-4 w-4 text-primary" />}
+            subtitle={`${commentsPerPost.toFixed(2)}/post`}
+          />
+
+          <MetricCard
+            title="Compartidos"
+            value={stats.totalShares.toLocaleString()}
+            change={`${sharesComparison > 0 ? '+' : ''}${sharesComparison}`}
+            trend={sharesComparison >= 0 ? 'up' : 'down'}
+            icon={<Share2 className="h-4 w-4 text-primary" />}
+            subtitle={`${sharesPerPost.toFixed(2)}/post`}
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-        <StatCard
-          title="Posts"
-          value={stats.totalPosts}
-          icon={<Activity className="w-6 h-6" />}
-          comparison={postsComparison}
-          ratio={`${postsComparison} nuevos`}
-        />
-        <StatCard
-          title="Visualizaciones"
-          value={stats.totalViews}
-          icon={<Eye className="w-6 h-6" />}
-          comparison={viewsComparison}
-          ratio={`${viewsPerPost.toFixed(2)} /post`}
-        />
-        <StatCard
-          title="Ratio de Engagement"
-          value={Number(engagementRate.toFixed(2))}
-          icon={<ThumbsUp className="w-6 h-6" />}
-          comparison={Number(engagementRateComparison.toFixed(2))}
-          ratio={`${engagementRate.toFixed(2)}%`}
-          isPercentage={true}
-        />
-        <StatCard
-          title="Reacciones"
-          value={stats.totalLikes}
-          icon={<ThumbsUp className="w-6 h-6" />}
-          comparison={likesComparison}
-          ratio={`${likesPerPost.toFixed(2)} /post`}
-        />
-        <StatCard
-          title="Comentarios"
-          value={stats.totalComments}
-          icon={<MessageCircle className="w-6 h-6" />}
-          comparison={commentsComparison}
-          ratio={`${commentsPerPost.toFixed(2)} /post`}
-        />
-        <StatCard
-          title="Compartidos"
-          value={stats.totalShares}
-          icon={<Share2 className="w-6 h-6" />}
-          comparison={sharesComparison}
-          ratio={`${sharesPerPost.toFixed(2)} /post`}
-        />
-      </div>
-
-      <div className="flex gap-6 bg-white p-6 rounded-lg shadow">
-        <div className="w-[70%]">
-          <h3 className="text-lg font-semibold mb-4">Performance Over Time</h3>
-          <div className="flex space-x-4 mb-4">
-            {Object.keys(selectedMetrics).map(metric => (
-              <label key={metric} className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={selectedMetrics[metric as keyof typeof selectedMetrics]}
-                  onChange={() => handleMetricChange(metric as 'views' | 'likes' | 'comments' | 'shares')}
-                />
-                <span className="ml-2">{metric.charAt(0).toUpperCase() + metric.slice(1)}</span>
-              </label>
-            ))}
-          </div>
-
-          <div className="h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#ffffff" opacity={0.1} />
-                <XAxis 
-                  dataKey="date" 
-                  stroke="#000000"
-                  tick={{ fontSize: 12, fill: '#000000' }}
-                  domain={['dataMin', 'dataMax']}
-                  tickFormatter={(dateStr) => {
-                      try {
+      <div className="grid gap-6 lg:grid-cols-7">
+        <Card className="lg:col-span-5">
+          <CardContent className="p-6">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Performance Over Time</h3>
+                <div className="flex gap-4">
+                  {Object.entries(selectedMetrics).map(([metric, isSelected]) => (
+                    <Button
+                      key={metric}
+                      variant={isSelected ? "default" : "outline"}
+                      size="sm"
+                      className={cn(
+                        "transition-colors",
+                        isSelected && "bg-primary hover:bg-secondary"
+                      )}
+                      onClick={() => handleMetricChange(metric as 'views' | 'likes' | 'comments' | 'shares')}
+                    >
+                      {metric.charAt(0).toUpperCase() + metric.slice(1)}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff" opacity={0.1} />
+                    <XAxis
+                      dataKey="date"
+                      stroke="#000000"
+                      tick={{ fontSize: 12, fill: '#000000' }}
+                      domain={['dataMin', 'dataMax']}
+                      tickFormatter={(dateStr) => {
+                        try {
                           const date = new Date(dateStr);
                           if (!isNaN(date.getTime())) {
-                              return date.toLocaleDateString('es-ES', {
-                                  day: '2-digit',
-                                  month: '2-digit',
-                                  year: 'numeric'
-                              });
+                            return date.toLocaleDateString('es-ES', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              year: 'numeric'
+                            });
                           }
                           return '';
-                      } catch (error) {
-                          console.error('Error formateando fecha:', dateStr);
+                        } catch (error) {
+                          console.error('Error formatting date:', dateStr);
                           return '';
-                      }
-                  }}
-                />
-                <YAxis yAxisId="left" stroke="#000000" tick={{ fontSize: 12, fill: '#000000' }} />
-                <YAxis yAxisId="right" orientation="right" stroke="#000000" tick={{ fontSize: 12, fill: '#000000' }} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#333', border: 'none', borderRadius: '8px' }} 
-                  itemStyle={{ color: '#ffffff' }} 
-                />
-                {selectedMetrics.views && (
-                  <Line 
-                    yAxisId="left"
-                    type="monotone" 
-                    dataKey="views" 
-                    stroke={getBarColor('views')} 
-                    strokeWidth={2} 
-                    dot={false} 
-                  />
-                )}
-                {selectedMetrics.likes && (
-                  <Line 
-                    yAxisId="right"
-                    type="monotone" 
-                    dataKey="likes" 
-                    stroke={getBarColor('likes')} 
-                    strokeWidth={2} 
-                    dot={false} 
-                  />
-                )}
-                {selectedMetrics.comments && (
-                  <Line 
-                    yAxisId="right"
-                    type="monotone" 
-                    dataKey="comments" 
-                    stroke={getBarColor('comments')} 
-                    strokeWidth={2} 
-                    dot={false} 
-                  />
-                )}
-                {selectedMetrics.shares && (
-                  <Line 
-                    yAxisId="right"
-                    type="monotone" 
-                    dataKey="shares" 
-                    stroke={getBarColor('shares')} 
-                    strokeWidth={2} 
-                    dot={false} 
-                  />
-                )}
-              </LineChart>
-            </ResponsiveContainer>
+                        }
+                      }}
+                    />
+                    <YAxis yAxisId="left" stroke="#000000" tick={{ fontSize: 12, fill: '#000000' }} />
+                    <YAxis yAxisId="right" orientation="right" stroke="#000000" tick={{ fontSize: 12, fill: '#000000' }} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#333', border: 'none', borderRadius: '8px' }}
+                      itemStyle={{ color: '#ffffff' }}
+                    />
+                    {selectedMetrics.views && (
+                      <Line
+                        yAxisId="left"
+                        type="monotone"
+                        dataKey="views"
+                        stroke={getBarColor('views')}
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    )}
+                    {selectedMetrics.likes && (
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="likes"
+                        stroke={getBarColor('likes')}
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    )}
+                    {selectedMetrics.comments && (
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="comments"
+                        stroke={getBarColor('comments')}
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    )}
+                    {selectedMetrics.shares && (
+                      <Line
+                        yAxisId="right"
+                        type="monotone"
+                        dataKey="shares"
+                        stroke={getBarColor('shares')}
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    )}
+                  </LineChart>
+
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardContent className="p-6">
+            <div className="flex flex-col gap-4">
+              <h3 className="text-lg font-semibold">Formatos</h3>
+              <div className="h-[350px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={postTypeData}
+                      dataKey="count"
+                      nameKey="post_type"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={120}
+                      innerRadius={60}
+                      label={({
+                        cx,
+                        cy,
+                        midAngle,
+                        innerRadius,
+                        outerRadius,
+                        value,
+                        index
+                      }) => {
+                        const RADIAN = Math.PI / 180;
+                        const radius = 25 + innerRadius + (outerRadius - innerRadius);
+                        const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                        const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                        return (
+                          <text
+                            x={x}
+                            y={y}
+                            fill="#666"
+                            textAnchor={x > cx ? 'start' : 'end'}
+                            dominantBaseline="central"
+                            className="text-xs"
+                          >
+                            {`${postTypeData[index].post_type} (${value})`}
+                          </text>
+                        );
+                      }}
+                    >
+                      {postTypeData.map((entry, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={COLORS[index % COLORS.length]}
+                          className="hover:opacity-80 transition-opacity duration-200"
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-white p-4 rounded-lg shadow-lg border border-gray-200">
+                              <p className="font-semibold">{data.post_type}</p>
+                              <p className="text-sm text-gray-600">Posts: {data.count}</p>
+                              <p className="text-sm text-gray-600">Alcance promedio: {(data.views / data.count).toFixed(0)}</p>
+                              <p className="text-sm text-gray-600">
+                                Interacción promedia: {((data.likes + data.comments + data.shares) / data.count).toFixed(1)}
+                              </p>
+                              <p className="text-sm text-gray-600">
+                                Comentarios promedio: {(data.comments / data.count).toFixed(1)}
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardContent className="p-6">
+          <div className="flex flex-col gap-4">
+            <h3 className="text-lg font-semibold">Topics Analysis</h3>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-gray-50">
+                  <TableHead onClick={() => handleSort('category')} className="cursor-pointer">Category</TableHead>
+                  <TableHead onClick={() => handleSort('count')} className="cursor-pointer text-right">Posts</TableHead>
+                  <TableHead onClick={() => handleSort('views')} className="cursor-pointer text-right">Avg. Reach</TableHead>
+                  <TableHead onClick={() => handleSort('likes')} className="cursor-pointer text-right">Avg. Engagement</TableHead>
+                  <TableHead onClick={() => handleSort('engagementRate')} className="cursor-pointer text-right">Engagement Rate</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedCategoryData.map((category, idx) => {
+                  const avgViews = category.views / category.count;
+                  const avgInteractions = (category.likes + category.comments + category.shares) / category.count;
+
+                  return (
+                    <TableRow key={idx} className="hover:bg-gray-50">
+                      <TableCell className="font-medium">{category.category}</TableCell>
+                      <TableCell className="text-right">{category.count}</TableCell>
+                      <TableCell className="text-right">{avgViews.toFixed(0)}</TableCell>
+                      <TableCell className="text-right">{avgInteractions.toFixed(1)}</TableCell>
+                      <TableCell className="text-right">{category.engagementRate.toFixed(2)}%</TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-        <div className="w-[30%]">
-          <h3 className="text-lg font-semibold mb-4">Tipos de Publicación</h3>
-          <ResponsiveContainer width="100%" height={400}>
-        <PieChart>
-          <Pie
-            data={postTypeData}
-            dataKey="count"
-            nameKey="post_type"
-            cx="50%"
-            cy="50%"
-            outerRadius={120}
-            innerRadius={60}
-            label={({
-              cx,
-              cy,
-              midAngle,
-              innerRadius,
-              outerRadius,
-              value,
-              index
-            }) => {
-              const RADIAN = Math.PI / 180;
-              const radius = 25 + innerRadius + (outerRadius - innerRadius);
-              const x = cx + radius * Math.cos(-midAngle * RADIAN);
-              const y = cy + radius * Math.sin(-midAngle * RADIAN);
-              return (
-                <text
-                  x={x}
-                  y={y}
-                  fill="#666"
-                  textAnchor={x > cx ? 'start' : 'end'}
-                  dominantBaseline="central"
-                  className="text-xs"
-                >
-                  {`${postTypeData[index].post_type} (${value})`}
-                </text>
-              );
-            }}
-          >
-            {postTypeData.map((entry, index) => (
-              <Cell 
-                key={`cell-${index}`} 
-                fill={COLORS[index % COLORS.length]}
-                className="hover:opacity-80 transition-opacity duration-200"
-              />
-            ))}
-          </Pie>
-          <Tooltip
-            content={({ active, payload }) => {
-              if (active && payload && payload.length) {
-                const data = payload[0].payload;
-                return (
-                  <div className="bg-white p-4 rounded-lg shadow-lg border border-gray-200">
-                    <p className="font-semibold">{data.post_type}</p>
-                    <p className="text-sm text-gray-600">Posts: {data.count}</p>
-                    <p className="text-sm text-gray-600">Alcance promedio: {(data.views / data.count).toFixed(0)}</p>
-                    <p className="text-sm text-gray-600">
-                      Interacción promedia: {((data.likes + data.comments + data.shares) / data.count).toFixed(1)}
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Comentarios promedio: {(data.comments / data.count).toFixed(1)}
-                    </p>
-                  </div>
-                );
-              }
-              return null;
-            }}
-          />
-        </PieChart>
-      </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="bg-white p-6 rounded-lg shadow mt-6">
-        <h3 className="text-lg font-semibold mb-4">Análisis de Temas</h3>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th onClick={() => handleSort('category')} className="cursor-pointer px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
-                <th onClick={() => handleSort('count')} className="cursor-pointer px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Posts</th>
-                <th onClick={() => handleSort('views')} className="cursor-pointer px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alcance Promedio</th>
-                <th onClick={() => handleSort('likes')} className="cursor-pointer px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Interacción Promedia</th>
-                <th onClick={() => handleSort('engagementRate')} className="cursor-pointer px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tasa de Engagement</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {sortedCategoryData.map((category, idx) => {
-                const avgViews = category.views / category.count;
-                const avgInteractions = (category.likes + category.comments + category.shares) / category.count;
-
-                return (
-                  <tr key={idx} className="hover:bg-gray-50 transition-colors duration-200">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {category.category}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {category.count}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {avgViews.toFixed(0)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {avgInteractions.toFixed(1)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {category.engagementRate.toFixed(2)}%
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
       <div>
-      <h3 className="text-lg font-semibold mb-4">Tus publicaciones</h3>
-      <PostsTable data={allPostsData} />
-
+        <h3 className="text-lg font-semibold mb-4">Your Posts</h3>
+        <PostsTable data={data} />
       </div>
-      
+
       {loading && (
         <div className="fixed inset-0 flex items-center justify-center bg-gray-800 bg-opacity-50 z-50">
           <div className="bg-white p-6 rounded-lg shadow-lg">
             <Spinner className="animate-spin h-10 w-10 text-blue-500" />
-            <p className="mt-2">Actualizando tus datos...</p>
+            <p className="mt-2">Updating your data...</p>
           </div>
         </div>
       )}
@@ -856,49 +907,50 @@ export default function Dashboard({ data }: DashboardProps) {
       {updateMessage && (
         <div className="mt-4 p-4 bg-green-100 text-green-800 rounded">
           <p>{updateMessage}</p>
-          <button onClick={() => window.location.reload()} className="mt-2 px-4 py-2 bg-blue-500 text-white rounded">
-            Actualiza para ver tus nuevos datos
-          </button>
+          <Button onClick={() => window.location.reload()} className="mt-2">
+            Refresh to see your new data
+          </Button>
         </div>
       )}
     </div>
   );
 }
 
-function StatCard({ 
-  title, 
-  value, 
-  icon, 
-  comparison, 
-  ratio, 
-  isPercentage = false 
-}: { 
-  title: string; 
-  value: number; 
-  icon: React.ReactNode; 
-  comparison: number; 
-  ratio: string;
-  isPercentage?: boolean;
+function MetricCard({
+  title,
+  value,
+  change,
+  trend,
+  icon,
+  subtitle
+}: {
+  title: string
+  value: string
+  change: string
+  trend: 'up' | 'down'
+  icon: React.ReactNode
+  subtitle: string
 }) {
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-gray-500">{title}</p>
-          <p className="text-2xl font-semibold">
-            {isPercentage ? `${value.toFixed(2)}%` : value.toLocaleString()}
-          </p>
+    <Card className="overflow-hidden transition-all hover:shadow-lg">
+      <CardContent className="p-6">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-600">{title}</span>
+            <span className="text-[#E85B4E]">{icon}</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-2xl font-bold">{value}</span>
+            <span className={cn(
+              "text-sm font-medium",
+              trend === 'up' ? "text-emerald-600" : "text-red-600"
+            )}>
+              {change}
+            </span>
+          </div>
+          <span className="text-xs text-gray-500">{subtitle}</span>
         </div>
-        <div className="text-blue-500">{icon}</div>
-      </div>
-      {comparison !== undefined && (
-        <div className="mt-2 text-sm text-right">
-          <span className={`font-semibold ${comparison > 0 ? 'text-green-500' : comparison < 0 ? 'text-red-500' : 'text-black'}`}>
-            {comparison > 0 ? '↑' : comparison < 0 ? '↓' : ''} {isPercentage ? `${Math.abs(comparison).toFixed(2)}%` : Math.abs(comparison).toLocaleString()}
-          </span>
-        </div>
-      )}
-      <div className="mt-2 text-sm text-gray-500 text-right">{ratio}</div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

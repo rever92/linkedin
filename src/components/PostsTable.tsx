@@ -61,7 +61,7 @@ const Pagination = ({
         type="button"
         onClick={() => onPageChange(currentPage - 1)}
         disabled={currentPage === 0}
-        className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+        className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-secondary hover:text-secondary-foreground"
       >
         Anterior
       </button>
@@ -71,11 +71,11 @@ const Pagination = ({
           key={index}
           type="button"
           onClick={() => handlePageClick(pageNumber)}
-          className={`px-3 py-1 rounded ${
+          className={`px-3 py-1 rounded border border-border ${
             pageNumber === currentPage + 1
-              ? 'bg-blue-500 text-white'
+              ? 'bg-primary text-primary-foreground'
               : typeof pageNumber === 'number'
-              ? 'hover:bg-gray-100'
+              ? 'hover:bg-gray-100 dark:hover:bg-gray-700'
               : ''
           }`}
           disabled={typeof pageNumber !== 'number'}
@@ -88,7 +88,7 @@ const Pagination = ({
         type="button"
         onClick={() => onPageChange(currentPage + 1)}
         disabled={currentPage >= totalPages - 1}
-        className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+        className="px-3 py-1 rounded border border-border disabled:opacity-50 disabled:cursor-not-allowed hover:bg-secondary hover:text-secondary-foreground"
       >
         Siguiente
       </button>
@@ -172,22 +172,22 @@ export default function PostsTable({ data }: PostsTableProps) {
   }, [currentPage, postsPerPage, sortedAndFilteredData]);
 
   return (
-    <div className="bg-white rounded-lg shadow">
-      <div className="p-4 border-b">
+    <div className="bg-card border border-border rounded-lg shadow-md p-4">
+      <div className="p-4 border-b border-border">
         <div className="flex items-center space-x-2">
-          <Search className="w-5 h-5 text-gray-400" />
+          <Search className="w-5 h-5 text-gray-400 dark:text-gray-300" />
           <input
             type="text"
             placeholder="Buscar publicaciones..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+            className="block w-full rounded-md border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
           />
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead className="bg-gray-50 dark:bg-gray-800">
             <tr>
               {[
                 { key: 'date', label: 'Fecha' },
@@ -200,7 +200,7 @@ export default function PostsTable({ data }: PostsTableProps) {
                 <th
                   key={key}
                   onClick={() => handleSort(key as keyof LinkedInPost)}
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100"
+                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700"
                 >
                   <div className="flex items-center space-x-1">
                     <span>{label}</span>
@@ -210,28 +210,28 @@ export default function PostsTable({ data }: PostsTableProps) {
               ))}
             </tr>
           </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
+          <tbody className="bg-white divide-y divide-gray-200 dark:bg-gray-900 dark:divide-gray-700">
             {paginatedData.map((post, idx) => (
-              <tr key={idx} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+              <tr key={idx} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {new Date(post.date).toLocaleDateString()}
                 </td>
-                <td className="px-6 py-4 text-sm text-gray-900">
+                <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
                   <div className="max-w-xl truncate">{post.text}</div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {post.views.toLocaleString()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {post.likes.toLocaleString()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {post.comments.toLocaleString()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {post.shares.toLocaleString()}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {post.category ? post.category : <span className="loader">Cargando...</span>}
                 </td>
               </tr>
@@ -243,7 +243,7 @@ export default function PostsTable({ data }: PostsTableProps) {
         <select 
           value={postsPerPage} 
           onChange={handlePostsPerPageChange} 
-          className="border rounded-md p-1"
+          className="border rounded-md p-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
         >
           {[10, 25, 50, 100].map((num) => (
             <option key={num} value={num}>{num} publicaciones</option>

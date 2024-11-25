@@ -9,6 +9,8 @@ import LandingPage from './components/LandingPage';
 import Sidebar from './components/Sidebar';
 import { Session } from '@supabase/supabase-js';
 import { sendAuthToExtension, checkExtensionSync } from './lib/extensionCommunication';
+import { ThemeProvider } from './lib/theme';
+import PostsTable from './components/PostsTable';
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -207,6 +209,11 @@ export default function App() {
   };
 
   const handleSubmitBatch = async (posts: LinkedInPost[]) => {
+    if (!session) {
+      alert('No hay sesión activa. Por favor, inicia sesión.');
+      return;
+    }
+
     if (!canSubmit) {
       alert('Has alcanzado el límite de 3 lotes por día. Intenta de nuevo mañana.');
       return;
@@ -309,31 +316,33 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex">
-      <Sidebar onNavigate={setCurrentView} currentView={currentView} />
-      
-      <div className="flex-1 transition-all duration-300 lg:ml-20">
-        <header className="bg-white shadow">
-          <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-center">
-              <div className="flex items-center space-x-2">
-                <LineChart className="w-8 h-8 text-blue-500" />
-                <h1 className="text-3xl font-bold text-gray-900">
-                  LinkedIn Analytics Dashboard
-                </h1>
+    <ThemeProvider>
+      <div className="min-h-screen bg-background flex">
+        <Sidebar onNavigate={setCurrentView} currentView={currentView} />
+        
+        <div className="flex-1 transition-all duration-300 lg:ml-20">
+          <header className="bg-card shadow">
+            <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+              <div className="flex items-center justify-center">
+                <div className="flex items-center space-x-2">
+                  <LineChart className="w-8 h-8 text-primary" />
+                  <h1 className="text-3xl font-bold text-foreground">
+                    Linksight
+                  </h1>
+                </div>
               </div>
             </div>
-          </div>
-        </header>
+          </header>
 
-        <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-          {data.length === 0 ? (
-            <FileUpload onDataLoaded={setData} />
-          ) : (
-            renderContent()
-          )}
-        </main>
+          <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+            {data.length === 0 ? (
+              <FileUpload onDataLoaded={setData} />
+            ) : (
+              renderContent()
+            )}
+          </main>
+        </div>
       </div>
-    </div>
+    </ThemeProvider>
   );
 }
