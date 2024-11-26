@@ -45,7 +45,9 @@ Formulario en el que elijes
     -Tema de referencia (te deja meter un campo de texto explicando de qué quieres hablar, e incluso pegar un artículo)
     -Envias eso a la API junto con ejemplos de tus top 20 posts de esa categoría y con el prompt para generar contenido, y te vevuelve un post y un prompt para una imagen con IA
 
+Esta url abre linkedin con el popup de publicar, se puede usar para post automatizado -> https://www.linkedin.com/feed/?shareActive=true&src=direct%2Fnone&veh=direct%2Fnone
 
+Añadir scraping de datos con python en un back -> https://github.com/joeyism/LinkedIn_scraper
 
 Definición de la bbdd:
 CREATE TABLE categorization_events (
