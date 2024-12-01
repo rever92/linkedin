@@ -195,7 +195,8 @@ export default function PostsTable({ data }: PostsTableProps) {
                 { key: 'views', label: 'Visualizaciones' },
                 { key: 'likes', label: 'Reacciones' },
                 { key: 'comments', label: 'Comentarios' },
-                { key: 'shares', label: 'Compartidos' }
+                { key: 'shares', label: 'Compartidos' },
+                { key: 'category', label: 'Temas'}
               ].map(({ key, label }) => (
                 <th
                   key={key}

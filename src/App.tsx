@@ -67,6 +67,14 @@ async function fetchCategoriesForNewPosts(posts: LinkedInPost[]) {
           })
         });
 
+        // Manejo del error 429
+        if (response.status === 429) {
+          console.error('Límite de cuota excedido. Esperando antes de reintentar...');
+          const waitTime = 60000; // Esperar 60 segundos
+          await delay(waitTime);
+          continue; // Reintentar la solicitud
+        }
+
         console.log('Respuesta recibida');
         console.log('Status:', response.status);
         
@@ -96,7 +104,7 @@ async function fetchCategoriesForNewPosts(posts: LinkedInPost[]) {
         console.log('Categorías procesadas:', categoriesData);
 
         if (!Array.isArray(categoriesData) || categoriesData.length !== batch.length) {
-          console.error(`Número incorrecto de categorías. Esperadas: ${batch.length}, Recibidas: ${categoriesData.length}`);
+          console.error(`Número incorrecto de categor��as. Esperadas: ${batch.length}, Recibidas: ${categoriesData.length}`);
           throw new Error('Número incorrecto de categorías');
         }
 

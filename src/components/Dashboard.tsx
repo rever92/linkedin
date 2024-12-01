@@ -22,7 +22,8 @@ import Papa from 'papaparse';
 import { Spinner } from './Spinner';
 import { LinkedInPost, DashboardStats } from '../types';
 import PostsTable from './PostsTable';
-
+import AdvancedMetrics from './AdvancedMetrics';
+import AIRecommendations from './AIRecommendations';
 interface DashboardProps {
   data: LinkedInPost[];
 }
@@ -35,7 +36,7 @@ export default function Dashboard({ data }: DashboardProps) {
     comments: false,
     shares: false,
   });
-  const [dateRange, setDateRange] = useState('thisMonth');
+  const [dateRange, setDateRange] = useState('last28Days');
   const [date, setDate] = useState<DateRange | undefined>({
     from: new Date(),
     to: new Date(),
@@ -563,26 +564,62 @@ export default function Dashboard({ data }: DashboardProps) {
   // const totalPosts = data.length; // Total de posts a procesar
   // const totalBatches = Math.ceil(totalPosts / BATCH_SIZE); // Calcular el total de lotes
 
+  const getWeeksInRange = (range: string): number => {
+    const now = new Date();
+    let startDate: Date;
+
+    switch (range) {
+      case 'last7Days':
+        return 1; // 1 semana
+      case 'last28Days':
+        return 4; // Aproximadamente 4 semanas
+      case 'thisMonth':
+        return Math.ceil(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate() / 7); // Días en el mes actual
+      case 'lastMonth':
+        return Math.ceil(new Date(now.getFullYear(), now.getMonth(), 0).getDate() / 7); // Días en el mes anterior
+      case 'last3Months':
+        return 13; // Aproximadamente 13 semanas
+      case 'last6Months':
+        return 26; // Aproximadamente 26 semanas
+      case 'lastYear':
+        return 52; // Aproximadamente 52 semanas
+      case 'allTime':
+        return Math.ceil((now.getTime() - new Date(0).getTime()) / (1000 * 60 * 60 * 24 * 7)); // Total de semanas desde el inicio
+      case 'custom':
+        if (date?.from && date?.to) {
+          const diffTime = Math.abs(date.to.getTime() - date.from.getTime());
+          return Math.ceil(diffTime / (1000 * 60 * 60 * 24 * 7)); // Semanas en el rango personalizado
+        }
+        return 0;
+      default:
+        return 0;
+    }
+  };
+
+  const weeksInRange = getWeeksInRange(dateRange); // Obtiene el número de semanas en el rango seleccionado
+  const avgPostsPerWeek = stats.totalPosts > 0 ? (stats.totalPosts / weeksInRange) : 0; // Calcula el promedio de posts por semana
+  const formattedAvgPostsPerWeek = avgPostsPerWeek.toFixed(1).replace('.', ','); // Redondea a un decimal y cambia el separador
+
   return (
     <div className={`space-y-8 p-8 ${document.body.classList.contains('dark') ? 'bg-background' : 'bg-background'}`}>
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Analytics Dashboard</h1>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Tus Estadísticas</h1>
           <div className="flex items-center gap-4">
             <Select value={dateRange} onValueChange={handleDateRangeChange}>
               <SelectTrigger className="w-[180px] bg-white">
                 <SelectValue placeholder="Select date range" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="last7Days">Last 7 days</SelectItem>
-                <SelectItem value="last28Days">Last 28 days</SelectItem>
-                <SelectItem value="thisMonth">This month</SelectItem>
-                <SelectItem value="lastMonth">Last month</SelectItem>
-                <SelectItem value="last3Months">Last 3 months</SelectItem>
-                <SelectItem value="last6Months">Last 6 months</SelectItem>
-                <SelectItem value="lastYear">Last year</SelectItem>
-                <SelectItem value="allTime">All time</SelectItem>
-                <SelectItem value="custom">Custom range</SelectItem>
+                <SelectItem value="last7Days">Últimos 7 días</SelectItem>
+                <SelectItem value="last28Days">Últimos 28 días</SelectItem>
+                <SelectItem value="thisMonth">Este mes</SelectItem>
+                <SelectItem value="lastMonth">Mes anterior</SelectItem>
+                <SelectItem value="last3Months">Últimos 3 meses</SelectItem>
+                <SelectItem value="last6Months">Últimos 6 meses</SelectItem>
+                <SelectItem value="lastYear">Últimos 365 días</SelectItem>
+                <SelectItem value="allTime">Todo el tiempo</SelectItem>
+                <SelectItem value="custom">Personalizado</SelectItem>
               </SelectContent>
             </Select>
             {dateRange === 'custom' && (
@@ -627,6 +664,7 @@ export default function Dashboard({ data }: DashboardProps) {
             change={`${postsComparison > 0 ? '+' : ''}${postsComparison}`}
             trend={postsComparison >= 0 ? 'up' : 'down'}
             icon={<Activity className="h-4 w-4 text-primary" />}
+            subtitle={`${formattedAvgPostsPerWeek} posts/semana`}
           />
           <MetricCard
             title="Visualizaciones"
@@ -679,7 +717,7 @@ export default function Dashboard({ data }: DashboardProps) {
           <CardContent className="p-6">
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Performance Over Time</h3>
+                <h3 className="text-lg font-semibold">Rendimiento en el tiempo</h3>
                 <div className="flex gap-4">
                   {Object.entries(selectedMetrics).map(([metric, isSelected]) => (
                     <Button
@@ -854,11 +892,11 @@ export default function Dashboard({ data }: DashboardProps) {
           </CardContent>
         </Card>
       </div>
-
+      <AdvancedMetrics data={data} filteredData={filteredData} />
       <Card>
         <CardContent className="p-6">
           <div className="flex flex-col gap-4">
-            <h3 className="text-lg font-semibold">Topics Analysis</h3>
+            <h3 className="text-lg font-semibold">Temas frecuentes</h3>
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-gray-50">
@@ -891,7 +929,7 @@ export default function Dashboard({ data }: DashboardProps) {
       </Card>
 
       <div>
-        <h3 className="text-lg font-semibold mb-4">Your Posts</h3>
+        <h3 className="text-lg font-semibold mb-4">Tus Posts</h3>
         <PostsTable data={data} />
       </div>
 
@@ -912,6 +950,9 @@ export default function Dashboard({ data }: DashboardProps) {
           </Button>
         </div>
       )}
+      <div className="mt-8">
+        <AIRecommendations data={data} />
+      </div>
     </div>
   );
 }

@@ -1,3 +1,9 @@
+He creado una aplicación con react y su papel es como fondo que sirve para realizar las métricas de LinkedIn de un usuario. Esta aplicación extrae los datos del perfil de usuario mediante una extensión de Google Chrome que el usuario puede ejecutar en su perfil y extraer de ahí datos de subs publicaciones como el listado de publicaciones y por cada una de ellas las visualizaciones las reacciones los comentarios y las veces que se ha compartido así como el tipo de publicación que es (imagen, video, texto, compartida, artículo, …).
+Esta aplicación busca ayudar a un usuario a optimizar su perfil de LinkedIn en base a datos es decir ser una persona data driven a la hora de generar contenidos en LinkedIn. 
+A futuro la idea dentro de muy poco tiempo es que puede incluso generar un calendario de publicaciones y crear publicaciones de éxito con IA generativa en base a sus publicaciones anteriores y un tema que quiera tratar.
+
+
+
 Paso 1
 Para limitar el uso de la API necesitaremos restringir el uso de llamadas posibles.
 Para ello haremos que:
@@ -28,9 +34,8 @@ Añade a la derecha del gráfico temporal, un gráfico que permita visualizar en
 Debajo del gráfico y antes de la tabla, crea una pequeña tabla que muestre un listado con las categorías de los posts, el recuento de posts por cada categoría, el alcance promedio por categoría, la interacción promedia por categoría (sumando reacciones, comentarios, y compartidos), y la tasa de engagement por categoría (interacción total/visualizaciones). 
 Añade una columna a la tabla de publicaciones con el "Ratio de Engagement", que muestre el dato para el periodo filtrado de Interacciones/Visualizaciones de cada publicaciones
 
-Futuros pasos
-Ampliar tamaño de lotes que se envían a la API de Google a 30
 
+Paso 7 
 Nuevos análisis
 Mejor y peor día/hora para publicar basado en engagement
 Estacionalidad en el engagement (¿hay meses/períodos mejores?)
@@ -39,7 +44,23 @@ Gráfico de correlación entre longitud y engagement
 Nube de palabras clave más efectivas
 Tasa de crecimiento de seguidores -> Dato que habrá que meter a mano
 
-Nuevo apartado -> Generador de contenido en base a IA Generativa y a tus posts con mejor engagement.
+Paso
+KPI nuevo de posts/semana para el periodo elegido (con comparativa respecto al mismo espacio de tiempo anterior)
+
+
+Paso 8
+
+
+Futuros pasos
+Ampliar tamaño de lotes que se envían a la API de Google a 30
+
+Planificador de contenidos. Este planificador de contenidos en principio tendrá dos grandes apartados:
+Publicaciones - Aquí el usuario podrá ir creando y guardando sus ideas de publicaciones, marcando estados como "Borrador, Listo, ..." y podrá incluso asignar el día y hora a la que lo quiere publicar.
+Calendario - El usuario podrá ir organizando cuándo quiere lanzar cada una de sus publicaciones (aunque no se podrá programar, porque Linkedin no lo permitee sta url abre linkedin con el popup de publicar, por lo que se puede usar para post automatizado que cuando carge, espere un par de segundos y pegue el contenido de la publicación (no la imagen)-> https://www.linkedin.com/feed/?shareActive=true&src=direct%2Fnone&veh=direct%2Fnone ).
+Funcionalidades IA:
+* Generar un plan de contenidos. En base a las recomendaciones que hayas obtenido en tu perfil en base al análisis actual, te crea una propuesta de plan de publicaciones que se puede añadir a tu listado de publicaciones. 
+* Generador un contenido con ia. Para cada contenido específico, te permite crear un nuevo contenido con IA o hacer un análisis sobre uno que ya has cread, y una vez te genera la nueva versión, te muestra uno al lado del otro para que los comprares y te pide revision y permite incluso modificarlo.
+
 Formulario en el que elijes
     -Categoría (en base a las categorías de los posts)
     -Tema de referencia (te deja meter un campo de texto explicando de qué quieres hablar, e incluso pegar un artículo)
