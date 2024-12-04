@@ -22,7 +22,7 @@ import Papa from 'papaparse';
 import { Spinner } from './Spinner';
 import { LinkedInPost, DashboardStats } from '../types';
 import PostsTable from './PostsTable';
-import AdvancedMetrics from './AdvancedMetrics';
+// import AdvancedMetrics from './AdvancedMetrics';
 import AIRecommendations from './AIRecommendations';
 interface DashboardProps {
   data: LinkedInPost[];
@@ -73,6 +73,13 @@ export default function Dashboard({ data }: DashboardProps) {
     '#96CEB4',
     '#FFEEAD',
   ];
+
+  const metricLabels: { [key: string]: string } = {
+    views: 'Visualizaciones',
+    likes: 'Reacciones',
+    comments: 'Comentarios',
+    shares: 'Compartidos'
+  };
 
   const handleDateRangeChange = (range: string) => {
     setDateRange(range);
@@ -712,8 +719,8 @@ export default function Dashboard({ data }: DashboardProps) {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-7">
-        <Card className="lg:col-span-5">
+      <div className="grid gap-6">
+        <Card>
           <CardContent className="p-6">
             <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between">
@@ -724,13 +731,18 @@ export default function Dashboard({ data }: DashboardProps) {
                       key={metric}
                       variant={isSelected ? "default" : "outline"}
                       size="sm"
+                      style={{
+                        backgroundColor: isSelected ? getBarColor(metric) : 'white',
+                        color: isSelected ? 'white' : 'inherit',
+                        borderColor: getBarColor(metric),
+                      }}
                       className={cn(
-                        "transition-colors",
-                        isSelected && "bg-primary hover:bg-secondary"
+                        "transition-colors hover:opacity-90",
+                        !isSelected && "hover:bg-gray-50"
                       )}
                       onClick={() => handleMetricChange(metric as 'views' | 'likes' | 'comments' | 'shares')}
                     >
-                      {metric.charAt(0).toUpperCase() + metric.slice(1)}
+                      {metricLabels[metric]}
                     </Button>
                   ))}
                 </div>
@@ -809,13 +821,14 @@ export default function Dashboard({ data }: DashboardProps) {
                     )}
                   </LineChart>
 
-                </ResponsiveContainer>
+                  </ResponsiveContainer>
               </div>
             </div>
           </CardContent>
         </Card>
+      </div>
 
-        <Card className="lg:col-span-2">
+        {/* <Card className="lg:col-span-2">
           <CardContent className="p-6">
             <div className="flex flex-col gap-4">
               <h3 className="text-lg font-semibold">Formatos</h3>
@@ -890,48 +903,8 @@ export default function Dashboard({ data }: DashboardProps) {
               </div>
             </div>
           </CardContent>
-        </Card>
-      </div>
-      <AdvancedMetrics data={data} filteredData={filteredData} />
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex flex-col gap-4">
-            <h3 className="text-lg font-semibold">Temas frecuentes</h3>
-            <Table>
-              <TableHeader>
-                <TableRow className="hover:bg-gray-50">
-                  <TableHead onClick={() => handleSort('category')} className="cursor-pointer">Category</TableHead>
-                  <TableHead onClick={() => handleSort('count')} className="cursor-pointer text-right">Posts</TableHead>
-                  <TableHead onClick={() => handleSort('views')} className="cursor-pointer text-right">Avg. Reach</TableHead>
-                  <TableHead onClick={() => handleSort('likes')} className="cursor-pointer text-right">Avg. Engagement</TableHead>
-                  <TableHead onClick={() => handleSort('engagementRate')} className="cursor-pointer text-right">Engagement Rate</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sortedCategoryData.map((category, idx) => {
-                  const avgViews = category.views / category.count;
-                  const avgInteractions = (category.likes + category.comments + category.shares) / category.count;
+        </Card> */}
 
-                  return (
-                    <TableRow key={idx} className="hover:bg-gray-50">
-                      <TableCell className="font-medium">{category.category}</TableCell>
-                      <TableCell className="text-right">{category.count}</TableCell>
-                      <TableCell className="text-right">{avgViews.toFixed(0)}</TableCell>
-                      <TableCell className="text-right">{avgInteractions.toFixed(1)}</TableCell>
-                      <TableCell className="text-right">{category.engagementRate.toFixed(2)}%</TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Tus Posts</h3>
-        <PostsTable data={data} />
-      </div>
 
       {loading && (
         <div className="fixed inset-0 flex items-center justify-center bg-gray-800 bg-opacity-50 z-50">
@@ -950,9 +923,7 @@ export default function Dashboard({ data }: DashboardProps) {
           </Button>
         </div>
       )}
-      <div className="mt-8">
-        <AIRecommendations data={data} />
-      </div>
+
     </div>
   );
 }

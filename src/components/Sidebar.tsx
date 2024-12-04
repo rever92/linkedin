@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Menu, X, LineChart, LogOut } from 'lucide-react';
+import { Star, LineChart, LogOut, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import ThemeToggle from './ThemeToggle';
 
@@ -9,10 +9,9 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ onNavigate, currentView }: SidebarProps) {
-  const [isOpen, setIsOpen] = useState(true);
-
   const menuItems = [
-    { id: 'dashboard', label: 'Mi panel', icon: <LineChart className="w-5 h-5" /> },
+    { id: 'analysis', label: 'Análisis', icon: <LineChart className="w-5 h-5" /> },
+    { id: 'planner', label: 'Planificador', icon: <Calendar className="w-5 h-5" /> },
   ];
 
   const handleSignOut = async () => {
@@ -21,60 +20,57 @@ export default function Sidebar({ onNavigate, currentView }: SidebarProps) {
 
   return (
     <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="fixed top-4 left-4 z-50 p-2 rounded-md bg-blue-500 text-white hover:bg-blue-600 lg:hidden"
-      >
-        {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
-      </button>
-
       <div
-        className={`fixed top-0 left-0 h-full bg-card shadow-lg transition-all duration-300 ease-in-out z-40 
-          ${isOpen ? 'w-64 translate-x-0' : 'w-64 -translate-x-full lg:translate-x-0 lg:w-20'}`}
+        className="fixed top-0 left-0 h-full bg-white border-r border-[#e5e7eb] transition-all duration-300 ease-in-out z-40 w-20 hover:w-64 group rounded-r-[20px] rounded-tl-[0%] rounded-bl-[0%]"
       >
-        <div className="flex flex-col h-full">
-          <div className="p-4">
-            <h2 className={`text-xl font-bold text-foreground ${!isOpen && 'lg:hidden'}`}>
-              Linksight
-            </h2>
-            
+        <div className="flex flex-col h-full py-4">
+          <div className="px-4 mb-6">
+            <div className="flex items-center space-x-3">
+              <Star className="w-8 h-8 text-primary flex-shrink-0" />
+              <h2 className="text-xl font-bold text-foreground transition-opacity duration-200 opacity-0 group-hover:opacity-100 overflow-hidden whitespace-nowrap">
+                Linksight
+              </h2>
+            </div>
           </div>
-          <div className='p-4'>
-          <ThemeToggle />
-          </div>
-          <nav className="flex-1 px-2">
+
+          <nav className="flex-1 px-2 space-y-1">
             {menuItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => onNavigate(item.id)}
-                className={`w-full flex items-center px-4 py-3 mb-2 rounded-lg transition-colors
+                className={`w-full flex items-center px-3 py-2.5 transition-all relative text-black
+                  group-hover:rounded-lg group-hover:px-3 
+                  ${currentView !== item.id && 'hover:bg-black/5'}
                   ${currentView === item.id 
-                    ? 'bg-primary text-primary-foreground' 
-                    : 'text-gray-600 hover:bg-gray-100'}`}
+                    ? 'bg-primary text-white group-hover:rounded-full !rounded-full group-hover:!rounded-full [&_svg]:text-white' 
+                    : ''} rounded-full`}
               >
-                <span className="flex items-center justify-center">{item.icon}</span>
-                <span className={`ml-3 ${!isOpen && 'lg:hidden'}`}>{item.label}</span>
+                <span className={`flex items-center justify-center flex-shrink-0 transition-all
+                  ${currentView === item.id ? 'w-9 h-9 group-hover:w-5 group-hover:h-5' : 'w-5 h-5'}`}>
+                  {item.icon}
+                </span>
+                <span className={`ml-3 transition-opacity duration-200 opacity-0 group-hover:opacity-100 overflow-hidden whitespace-nowrap
+                  ${currentView === item.id ? 'text-white' : ''}`}>
+                  {item.label}
+                </span>
               </button>
             ))}
           </nav>
 
-          <div className="p-4 border-t border-border">
-            <button
-              onClick={() => setIsOpen(!isOpen)}
-              className="hidden lg:flex w-full items-center justify-center px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg mb-2"
-            >
-              <Menu className="w-5 h-5" />
-              <span className={`ml-3 ${!isOpen && 'lg:hidden'}`}>Cerrar menú</span>
-            </button>
+          <div className="px-4 space-y-4 rounded-br-[10px] rounded-bl-[20px]">
+            <div className="transition-opacity duration-200 opacity-0 group-hover:opacity-100">
+              <ThemeToggle />
+            </div>
             
             <button
               onClick={handleSignOut}
-              className="w-full flex items-center px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg"
+              className="w-full flex items-center px-3 py-2.5 rounded-lg text-black hover:bg-black/5"
             >
-              <LogOut className="w-5 h-5" />
-              <span className={`ml-3 ${!isOpen && 'lg:hidden'}`}>Cerrar Sesión</span>
+              <LogOut className="w-5 h-5 flex-shrink-0" />
+              <span className="ml-3 transition-opacity duration-200 opacity-0 group-hover:opacity-100 overflow-hidden whitespace-nowrap">
+                Cerrar Sesión
+              </span>
             </button>
-            
           </div>
         </div>
       </div>
