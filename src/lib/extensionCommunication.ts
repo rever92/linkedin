@@ -1,7 +1,7 @@
 import { Session } from '@supabase/supabase-js';
 
 // Reemplaza esto con el ID que copiaste de chrome://extensions/
-const EXTENSION_ID = 'dbacenlpnlfjcpnpmjkjeflklmlihkcb'; 
+const EXTENSION_ID = 'doenkplbeocjbahgmieaeghpmeglaaoc'; 
 
 let sessionSent = false; // Variable para controlar el envío de la sesión
 

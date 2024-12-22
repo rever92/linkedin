@@ -626,3 +626,112 @@ const channels = supabase.channel('custom-filter-channel')
     }
   )
   .subscribe()
+
+
+
+
+//usuarios y roles
+-- Crear la tabla si no existe
+create table if not exists public.user_profiles (
+ id uuid references auth.users on delete cascade not null primary key,
+ role text not null default 'PREMIUM',
+ trial_ends_at timestamptz default (now() + interval '15 days'),
+ subscription_expiry timestamptz,
+ beta_features jsonb,
+ created_at timestamptz default now(),
+ updated_at timestamptz default now(),
+ 
+ constraint role_check check (role in ('FREE', 'PREMIUM', 'PRO', 'BETA_TESTER'))
+);
+
+-- Eliminar trigger de trial si existe
+drop trigger if exists check_user_trial on user_profiles;
+
+-- Eliminar función de trial si existe
+drop function if exists check_trial_expiration;
+
+-- Crear trigger para updated_at (usando la función existente)
+drop trigger if exists update_user_profiles_updated_at on user_profiles;
+create trigger update_user_profiles_updated_at
+ before update on user_profiles
+ for each row
+ execute function update_updated_at_column();
+
+-- Crear función para verificar trial
+create function check_trial_expiration()
+returns trigger as $check_trial$
+begin
+ if new.trial_ends_at < now() and new.role = 'PREMIUM' and new.subscription_expiry is null then
+   new.role := 'FREE';
+ end if;
+ return new;
+end;
+$check_trial$ language plpgsql;
+
+-- Crear trigger para verificar trial
+create trigger check_user_trial
+ before update on user_profiles
+ for each row
+ execute function check_trial_expiration();
+
+-- Políticas RLS
+alter table user_profiles enable row level security;
+
+-- Eliminar políticas existentes si las hay
+drop policy if exists "Users can view own profile" on user_profiles;
+drop policy if exists "Users can update own profile" on user_profiles;
+
+-- Crear nuevas políticas
+create policy "Users can view own profile"
+ on user_profiles for select
+ using ( auth.uid() = id );
+
+create policy "Users can update own profile"
+ on user_profiles for update
+ using ( auth.uid() = id );
+
+-- Crear extensión pg_cron si no existe
+create extension if not exists pg_cron;
+
+-- Manejar la eliminación y creación del job de manera segura
+DO $$
+BEGIN
+   -- Intentar eliminar el job si existe
+   PERFORM cron.unschedule('check-expired-trials');
+EXCEPTION
+   WHEN OTHERS THEN
+       -- Ignorar el error si el job no existe
+       NULL;
+END $$;
+
+-- Crear el nuevo job
+select cron.schedule(
+ 'check-expired-trials',
+ '0 0 * * *',
+ $$
+ update user_profiles 
+ set role = 'FREE'
+ where trial_ends_at < now() 
+   and role = 'PREMIUM' 
+   and subscription_expiry is null;
+ $$
+);
+
+
+create function public.handle_new_user() 
+returns trigger as $$
+begin
+  insert into public.user_profiles (id)
+  values (new.id);
+  return new;
+end;
+$$ language plpgsql security definer;
+
+
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+
+
+
