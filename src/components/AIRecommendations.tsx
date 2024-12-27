@@ -1,40 +1,78 @@
 import React, { useEffect, useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Lightbulb } from 'lucide-react';
-import { analyzeProfileMetrics } from './utils/metrics-analyzer';
+import { Lightbulb, Brain } from 'lucide-react';
+import { analyzeProfileMetrics, ProfileAnalysis } from './utils/metrics-analyzer';
 import { LinkedInPost } from '../types';
 import Spinner from './ui/spinner';
 import { supabase } from '../lib/supabase';
 import { useUserRole } from '../hooks/useUserRole';
+import { usePremiumActions } from '../hooks/usePremiumActions';
 import PremiumBanner from './ui/premium-banner';
 
 interface RecommendationsProps {
   data: LinkedInPost[];
 }
 
+interface Recommendation {
+  title: string;
+  content: string;
+}
+
+interface RecommendationData {
+  tipos_de_contenido: string;
+  mejores_horarios: string;
+  longitud_optima: string;
+  frecuencia_recomendada: string;
+  estrategias_de_engagement: string;
+  user_id: string;
+}
+
+interface ProfileAnalysisWithPosts extends ProfileAnalysis {
+  lastPosts: string[];
+}
+
 const AIRecommendations: React.FC<RecommendationsProps> = ({ data }) => {
-  // Primero todos los hooks
-  const { hasAccess, loading: roleLoading } = useUserRole();
+  const { hasAccess, loading: roleLoading, role } = useUserRole();
+  const { 
+    registerAction, 
+    checkProfileAnalysisLimit,
+    loading: actionLoading, 
+    error: actionError 
+  } = usePremiumActions();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [recommendations, setRecommendations] = useState([]);
+  const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [nextAnalysisDate, setNextAnalysisDate] = useState<Date | null>(null);
   const [lastAnalysisDate, setLastAnalysisDate] = useState<string | null>(null);
   const [timeRemaining, setTimeRemaining] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [canAnalyze, setCanAnalyze] = useState(false);
 
   const getAIRecommendations = async () => {
+    // Verificar límites antes de proceder
+    const canPerformAnalysis = await checkProfileAnalysisLimit();
+    if (!canPerformAnalysis) {
+      setError(
+        'Has alcanzado el límite de análisis permitido para tu plan. ' +
+        'Actualiza tu plan para realizar más análisis o espera hasta que puedas realizar el siguiente.'
+      );
+      return;
+    }
+
     setLoading(true);
+    setError(null);
     
     try {
       // Analizar los datos usando nuestro analizador
-      const analysisData = analyzeProfileMetrics(data);
-
-      // Obtener las 25 publicaciones más recientes y extraer solo el campo text
-      const lastPosts = data.slice(0, 25).map(post => post.text); 
-
-      // Añadir las últimas publicaciones al análisis
-      analysisData.lastPosts = lastPosts; 
+      const baseAnalysis = analyzeProfileMetrics(data);
+      const lastPosts = data.slice(0, 25).map(post => post.text);
+      
+      // Crear el objeto de análisis completo
+      const analysisData: ProfileAnalysis & { lastPosts: string[] } = {
+        ...baseAnalysis,
+        lastPosts
+      };
 
       // Imprimir el análisis en la consola
       console.log('Análisis completo del perfil:', analysisData);
@@ -86,7 +124,14 @@ const AIRecommendations: React.FC<RecommendationsProps> = ({ data }) => {
         console.log('Contenido extraído:', extractedContent);
 
         // Preparar los datos para guardar en Supabase
-        const recommendationsData = {};
+        const recommendationsData: RecommendationData = {
+          tipos_de_contenido: '',
+          mejores_horarios: '',
+          longitud_optima: '',
+          frecuencia_recomendada: '',
+          estrategias_de_engagement: '',
+          user_id: ''
+        };
 
         extractedContent.forEach(({ title, content }) => {
           // Reemplazar **texto** por <strong>texto</strong>
@@ -131,12 +176,22 @@ const AIRecommendations: React.FC<RecommendationsProps> = ({ data }) => {
         // Insertar las recomendaciones en Supabase
         const { data: insertData, error: insertError } = await supabase
           .from('recommendations')
-          .insert([recommendationsData]);
+          .insert([recommendationsData])
+          .select();
 
         if (insertError) {
-          console.error('Error al insertar recomendaciones:', insertError);
-        } else {
-          console.log('Recomendaciones guardadas:', insertData);
+          throw insertError;
+        } else if (insertData && insertData.length > 0) {
+          // Registrar la acción premium
+          await registerAction('profile_analysis', {
+            recommendations_id: insertData[0].id,
+            metrics_analyzed: Object.keys(baseAnalysis)
+          });
+
+          // Actualizar estados
+          const generatedDate = new Date();
+          setNextAnalysisDate(generatedDate);
+          setLastAnalysisDate(generatedDate.toLocaleDateString('es-ES'));
         }
 
         // Actualizar el estado con el contenido formateado
@@ -149,15 +204,20 @@ const AIRecommendations: React.FC<RecommendationsProps> = ({ data }) => {
       } else {
         console.error('Respuesta vacía o inválida:', result);
       }
-    } catch (err) {
+
+      // Después de un análisis exitoso
+      setCanAnalyze(false);
+    } catch (err: any) {
       console.error('Error al analizar los datos:', err);
+      setError(err.message || 'Error al analizar el perfil');
     } finally {
       setLoading(false);
     }
   };
 
+  // Verificar acceso y cargar datos iniciales
   useEffect(() => {
-    const loadRecommendations = async () => {
+    const loadInitialData = async () => {
       if (!hasAccess('premium_ai_recommendations')) {
         setInitialLoading(false);
         return;
@@ -209,9 +269,28 @@ const AIRecommendations: React.FC<RecommendationsProps> = ({ data }) => {
               content: latestRecommendation.estrategias_de_engagement,
             },
           ]);
+
           const generatedDate = new Date(latestRecommendation.date_generated);
           setNextAnalysisDate(generatedDate);
           setLastAnalysisDate(generatedDate.toLocaleDateString('es-ES'));
+
+          // Verificar si podemos realizar un nuevo análisis
+          const canPerformAnalysis = await checkProfileAnalysisLimit();
+          setCanAnalyze(canPerformAnalysis);
+
+          if (!canPerformAnalysis) {
+            const now = new Date();
+            const diff = generatedDate.getTime() + 30 * 24 * 60 * 60 * 1000 - now.getTime();
+            if (diff > 0) {
+              const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+              const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+              const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+              setTimeRemaining(`${days}d ${hours}h ${minutes}m`);
+            }
+          }
+        } else {
+          // Si no hay análisis previos, permitir realizar uno
+          setCanAnalyze(true);
         }
       } catch (err) {
         console.error('Error al cargar las recomendaciones:', err);
@@ -220,8 +299,8 @@ const AIRecommendations: React.FC<RecommendationsProps> = ({ data }) => {
       }
     };
 
-    loadRecommendations();
-  }, [hasAccess]);
+    loadInitialData();
+  }, [hasAccess, checkProfileAnalysisLimit]);
 
   useEffect(() => {
     if (nextAnalysisDate) {
@@ -245,7 +324,20 @@ const AIRecommendations: React.FC<RecommendationsProps> = ({ data }) => {
     }
   }, [nextAnalysisDate]);
 
-  // Verificación de acceso después de todos los hooks
+  // Si está cargando el rol o los datos iniciales, mostrar loader
+  if (roleLoading || initialLoading) {
+    return (
+      <Card className="mt-6">
+        <CardContent className="p-6">
+          <div className="flex justify-center items-center min-h-[400px]">
+            <Spinner />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Si no tiene acceso premium, mostrar banner
   if (!hasAccess('premium_ai_recommendations')) {
     return (
       <PremiumBanner message="Obtén recomendaciones personalizadas basadas en IA para optimizar tu contenido" />
@@ -269,38 +361,56 @@ const AIRecommendations: React.FC<RecommendationsProps> = ({ data }) => {
       </CardHeader>
       <CardContent>
         {initialLoading ? (
-          <div className="flex justify-center items-center">
+          <div className="flex justify-center items-center min-h-[400px]">
             <Spinner />
           </div>
         ) : (
           <div className="space-y-4">
-            {recommendations.length > 0 && (
-              <div className="mt-4">
-                {recommendations.map((item, index) => (
-                  <div key={index} className="mb-6">
-                    <h2 className="text-xl font-bold mb-2">{item.title}</h2>
-                    <div
-                      className="prose"
-                      dangerouslySetInnerHTML={{ __html: item.content }}
-                    />
-                  </div>
-                ))}
+            {error && (
+              <div className="text-sm text-red-500 bg-red-50 p-3 rounded-lg border border-red-200">
+                {error}
               </div>
             )}
-            <Button
-              onClick={getAIRecommendations}
-              disabled={loading || !!nextAnalysisDate}
-              className="w-full"
-            >
-              {loading
-                ? 'Analizando perfil...'
-                : nextAnalysisDate
-                ? 'Debes esperar para realizar un nuevo análisis'
-                : 'Analizar perfil'}
-            </Button>
-            {timeRemaining && (
-              <div className="text-center text-sm text-gray-500">
-                Puedes realizar un nuevo análisis en {timeRemaining}.
+            
+            <div className="space-y-4">
+              <div className="flex flex-col items-center gap-3">
+                <Button
+                  onClick={getAIRecommendations}
+                  disabled={loading || actionLoading || !canAnalyze || initialLoading}
+                  className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white px-6"
+                >
+                  <Brain className="w-4 h-4 mr-2" />
+                  {loading || actionLoading
+                    ? 'Analizando perfil...'
+                    : recommendations.length === 0 && canAnalyze
+                    ? '¡Haz tu primer análisis de perfil!'
+                    : canAnalyze
+                    ? 'Analizar perfil'
+                    : 'Debes esperar para realizar un nuevo análisis'}
+                </Button>
+
+                {recommendations.length === 0 && canAnalyze && (
+                  <p className="text-sm text-gray-600 text-center max-w-lg">
+                    Obtén recomendaciones personalizadas basadas en IA para optimizar tu contenido y aumentar tu engagement en LinkedIn
+                  </p>
+                )}
+
+                {timeRemaining && (
+                  <div className="text-center text-sm text-gray-500 p-2 bg-gray-50 rounded-md w-full">
+                    <span className="font-medium">Próximo análisis disponible en:</span>
+                    <div className="font-mono text-base mt-1">{timeRemaining}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {recommendations.length > 0 && (
+              <div className="mt-8 space-y-6">
+                {recommendations.map((item, index) => (
+                  <div key={index} className="prose max-w-none"
+                    dangerouslySetInnerHTML={{ __html: item.content }}
+                  />
+                ))}
               </div>
             )}
           </div>

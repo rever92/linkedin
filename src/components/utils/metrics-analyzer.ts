@@ -1,50 +1,6 @@
 import { LinkedInPost } from '../types';
 
-interface PostTypeMetrics {
-  postCount: number;
-  avgViews: number;
-  avgLikes: number;
-  avgComments: number;
-  avgShares: number;
-  avgEngagementRate: number;
-}
-
-interface CategoryMetrics {
-  postCount: number;
-  avgViews: number;
-  avgEngagement: number;
-  engagementRate: number;
-}
-
-interface ContentLengthMetrics {
-  range: {
-    min: number;
-    max: number | null;
-  };
-  postCount: number;
-  avgViews: number;
-  avgLikes: number;
-  avgComments: number;
-  avgShares: number;
-  engagementRate: number;
-  totalViews: number;
-  totalLikes: number;
-  totalComments: number;
-  totalShares: number;
-}
-
-interface TimeSlotMetrics {
-  dayOfWeek: string;
-  hour: number;
-  engagementRate: number;
-  postCount: number;
-  avgViews: number;
-  avgLikes: number;
-  avgComments: number;
-  avgShares: number;
-}
-
-interface ProfileAnalysis {
+export interface ProfileAnalysis {
   generalMetrics: {
     totalPosts: number;
     totalViews: number;
@@ -58,26 +14,51 @@ interface ProfileAnalysis {
     avgSharesPerPost: number;
   };
   postTypeAnalysis: {
-    [key: string]: PostTypeMetrics;
+    [key: string]: {
+      postCount: number;
+      avgViews: number;
+      avgLikes: number;
+      avgComments: number;
+      avgShares: number;
+      avgEngagementRate: number;
+    };
   };
   categoryAnalysis: {
-    [key: string]: CategoryMetrics;
+    [key: string]: {
+      postCount: number;
+      avgViews: number;
+      avgEngagement: number;
+      engagementRate: number;
+    };
   };
   timeAnalysis: {
-    heatmap: TimeSlotMetrics[];
-    bestPerformingTimes: TimeSlotMetrics[];
-    worstPerformingTimes: TimeSlotMetrics[];
-  };
+    dayOfWeek: string;
+    hour: number;
+    engagementRate: number;
+    postCount: number;
+    avgViews: number;
+    avgLikes: number;
+    avgComments: number;
+    avgShares: number;
+  }[];
   contentLength: {
-    short: ContentLengthMetrics;
-    medium: ContentLengthMetrics;
-    long: ContentLengthMetrics;
-    bestPerformingLength: 'short' | 'medium' | 'long';
+    shortPosts: {
+      count: number;
+      avgEngagement: number;
+    };
+    mediumPosts: {
+      count: number;
+      avgEngagement: number;
+    };
+    longPosts: {
+      count: number;
+      avgEngagement: number;
+    };
   };
   trends: {
-    viewsTrend: 'increasing' | 'decreasing' | 'stable';
-    engagementTrend: 'increasing' | 'decreasing' | 'stable';
-    postFrequency: number;
+    views: number[];
+    engagement: number[];
+    dates: string[];
   };
 }
 
@@ -112,7 +93,7 @@ export const analyzeProfileMetrics = (posts: LinkedInPost[]): ProfileAnalysis =>
   ) * 100;
 
   // Análisis por tipo de post
-  const postTypeAnalysis: { [key: string]: PostTypeMetrics } = {};
+  const postTypeAnalysis: { [key: string]: { postCount: number; avgViews: number; avgLikes: number; avgComments: number; avgShares: number; avgEngagementRate: number } } = {};
   posts.forEach(post => {
     const postType = post.post_type || 'unknown';
     if (!postTypeAnalysis[postType]) {
@@ -147,7 +128,7 @@ export const analyzeProfileMetrics = (posts: LinkedInPost[]): ProfileAnalysis =>
   });
 
   // Análisis por categoría
-  const categoryAnalysis: { [key: string]: CategoryMetrics } = {};
+  const categoryAnalysis: { [key: string]: { postCount: number; avgViews: number; avgEngagement: number; engagementRate: number } } = {};
   posts.forEach(post => {
     const category = post.category || 'uncategorized';
     if (!categoryAnalysis[category]) {
@@ -192,7 +173,7 @@ export const analyzeProfileMetrics = (posts: LinkedInPost[]): ProfileAnalysis =>
 };
 
 const analyzePostingTimes = (posts: LinkedInPost[]) => {
-  const timeMetrics: { [key: string]: TimeSlotMetrics } = {};
+  const timeMetrics: { [key: string]: { dayOfWeek: string; hour: number; engagementRate: number; postCount: number; avgViews: number; avgLikes: number; avgComments: number; avgShares: number } } = {};
   const days = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
 
   posts.forEach(post => {
@@ -247,7 +228,7 @@ const analyzeContentLength = (posts: LinkedInPost[]) => {
     long: { min: 1500, max: null }
   };
 
-  const initMetrics = (): ContentLengthMetrics => ({
+  const initMetrics = (): { range: { min: number; max: number | null }; postCount: number; avgViews: number; avgLikes: number; avgComments: number; avgShares: number; engagementRate: number; totalViews: number; totalLikes: number; totalComments: number; totalShares: number } => ({
     range: { min: 0, max: null },
     postCount: 0,
     avgViews: 0,

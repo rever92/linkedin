@@ -9,9 +9,15 @@ import {
 } from '../ui/select';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarClock, Trash2 } from 'lucide-react';
+import { CalendarClock, Trash2, ArrowUpDown } from 'lucide-react';
 import { Button } from '../ui/button';
 import { supabase } from '../../lib/supabase';
+
+type SortOption = 
+  | 'created_asc'
+  | 'created_desc'
+  | 'scheduled_asc'
+  | 'scheduled_desc';
 
 interface PostListProps {
   posts: Post[];
@@ -21,6 +27,7 @@ interface PostListProps {
 
 export default function PostList({ posts, onPostSelect, onPostUpdate }: PostListProps) {
   const [filter, setFilter] = useState<PostState | 'todos'>('todos');
+  const [sortBy, setSortBy] = useState<SortOption>('created_desc');
   const [schedulingPost, setSchedulingPost] = useState<Post | null>(null);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
@@ -28,6 +35,31 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
   const filteredPosts = posts.filter(post => 
     filter === 'todos' ? true : post.state === filter
   );
+
+  const sortedPosts = [...filteredPosts].sort((a, b) => {
+    switch (sortBy) {
+      case 'created_asc':
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      case 'created_desc':
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      case 'scheduled_asc':
+        if (!a.scheduled_datetime && !b.scheduled_datetime) {
+          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        }
+        if (!a.scheduled_datetime) return 1;
+        if (!b.scheduled_datetime) return -1;
+        return new Date(a.scheduled_datetime).getTime() - new Date(b.scheduled_datetime).getTime();
+      case 'scheduled_desc':
+        if (!a.scheduled_datetime && !b.scheduled_datetime) {
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        }
+        if (!a.scheduled_datetime) return 1;
+        if (!b.scheduled_datetime) return -1;
+        return new Date(b.scheduled_datetime).getTime() - new Date(a.scheduled_datetime).getTime();
+      default:
+        return 0;
+    }
+  });
 
   const getStateColor = (state: PostState) => {
     switch (state) {
@@ -83,7 +115,22 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-between items-center">
+        <Select
+          value={sortBy}
+          onValueChange={(value) => setSortBy(value as SortOption)}
+        >
+          <SelectTrigger className="w-[250px]">
+            <SelectValue placeholder="Ordenar por..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="created_desc">Más recientes primero</SelectItem>
+            <SelectItem value="created_asc">Más antiguos primero</SelectItem>
+            <SelectItem value="scheduled_asc">Programados (ascendente)</SelectItem>
+            <SelectItem value="scheduled_desc">Programados (descendente)</SelectItem>
+          </SelectContent>
+        </Select>
+
         <Select
           value={filter}
           onValueChange={(value) => setFilter(value as PostState | 'todos')}
@@ -101,7 +148,7 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
       </div>
 
       <div className="space-y-3">
-        {filteredPosts.map((post) => (
+        {sortedPosts.map((post) => (
           <div
             key={post.id}
             className="group p-6 bg-card rounded-[30px] shadow-sm hover:shadow-md transition-all"
@@ -116,7 +163,7 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
                     {post.state}
                   </span>
                   <span className="text-sm text-muted-foreground">
-                    {format(new Date(post.created_at), "d 'de' MMMM, yyyy", { locale: es })}
+                    Creado el {format(new Date(post.created_at), "d 'de' MMMM, yyyy", { locale: es })}
                   </span>
                 </div>
                 <p className="line-clamp-2 text-foreground text-sm">
@@ -210,7 +257,7 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
           </div>
         ))}
 
-        {filteredPosts.length === 0 && (
+        {sortedPosts.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">
             No hay publicaciones que mostrar
           </div>

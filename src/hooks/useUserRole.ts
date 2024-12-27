@@ -24,16 +24,16 @@ export const useUserRole = () => {
         const { data: { user }, error: authError } = await supabase.auth.getUser();
         
         if (authError) throw authError;
-        
+
         if (user) {
           const { data, error: profileError } = await supabase
             .from('user_profiles')
             .select('role, is_beta_tester, trial_ends_at, subscription_expiry')
             .eq('id', user.id)
             .single();
-            
+
           if (profileError) throw profileError;
-          
+
           if (data) {
             setRole(data.role);
             setIsBetaTester(data.is_beta_tester);

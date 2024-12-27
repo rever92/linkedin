@@ -19,8 +19,21 @@ import {
 } from '../ui/select';
 import { Input } from '../ui/input';
 import { format } from 'date-fns';
-import { Calendar, Clock, Image as ImageIcon } from 'lucide-react';
+import { Calendar, Clock, Image as ImageIcon, Share2, Brain } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import { Dialog as DialogPrimitive } from '@radix-ui/react-dialog';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import ReactMarkdown from 'react-markdown';
+import { usePremiumActions } from '../../hooks/usePremiumActions';
+
+// Mover la inicialización dentro de una función para evitar problemas con import.meta
+const getGoogleAI = () => {
+  const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+  return genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+};
+
+const MAX_OPTIMIZATIONS_PER_POST = 3;
+const MAX_MONTHLY_OPTIMIZATIONS = 30;
 
 interface PostEditorProps {
   post?: Post | null;
@@ -35,6 +48,48 @@ const imageStyles = [
   { id: 'anime', name: 'Anime', preview: '/styles/anime.png' },
   { id: 'watercolor', name: 'Acuarela', preview: '/styles/watercolor.png' },
 ];
+
+interface OptimizationDialogProps {
+  originalContent: string;
+  optimizedContent: string;
+  onAccept: () => void;
+  onDiscard: () => void;
+}
+
+const OptimizationDialog: React.FC<OptimizationDialogProps> = ({
+  originalContent,
+  optimizedContent,
+  onAccept,
+  onDiscard
+}) => (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
+    <div className="bg-white rounded-lg p-6 w-[90vw] max-w-4xl max-h-[90vh] overflow-y-auto">
+      <h2 className="text-xl font-bold mb-4">Comparación de Contenido</h2>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <h3 className="font-medium mb-2">Original</h3>
+          <div className="p-4 bg-gray-50 rounded-lg whitespace-pre-wrap">
+            {originalContent}
+          </div>
+        </div>
+        <div>
+          <h3 className="font-medium mb-2">Optimizado</h3>
+          <div className="p-4 bg-purple-50 rounded-lg prose prose-sm max-w-none">
+            <ReactMarkdown>{optimizedContent}</ReactMarkdown>
+          </div>
+        </div>
+      </div>
+      <div className="flex justify-end gap-2 mt-4">
+        <Button variant="outline" onClick={onDiscard}>
+          Descartar
+        </Button>
+        <Button onClick={onAccept}>
+          Aceptar cambios
+        </Button>
+      </div>
+    </div>
+  </div>
+);
 
 export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
   const [content, setContent] = useState(post?.content || '');
@@ -56,6 +111,15 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
   const [selectedStyle, setSelectedStyle] = useState(imageStyles[0].id);
   const [generatedImages, setGeneratedImages] = useState<AIGeneratedImage[]>([]);
   const [activeTab, setActiveTab] = useState<'content' | 'image'>('content');
+  const [optimizedContent, setOptimizedContent] = useState<string | null>(null);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [optimizationError, setOptimizationError] = useState<string | null>(null);
+  const { 
+    registerAction, 
+    checkPostOptimizationLimit,
+    loading: actionLoading, 
+    error: actionError 
+  } = usePremiumActions();
 
   const handleSchedule = () => {
     setShowScheduler(true);
@@ -115,6 +179,178 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
     }
   };
 
+  const handleShareToLinkedIn = () => {
+    const encodedText = encodeURIComponent(content);
+    const linkedInUrl = `https://www.linkedin.com/feed/?linkOrigin=LI_BADGE&shareActive=true&text=${encodedText}`;
+    window.open(linkedInUrl, '_blank');
+  };
+
+  const handleOptimizeWithAI = async () => {
+    try {
+      // Verificar límites antes de proceder
+      const canOptimize = await checkPostOptimizationLimit(post?.id || 'new');
+      if (!canOptimize) {
+        setOptimizationError('Has alcanzado el límite de optimizaciones permitido para este post o para tu plan');
+        return;
+      }
+
+      setIsOptimizing(true);
+      setOptimizationError(null);
+
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
+      if (!user) throw new Error('Usuario no autenticado');
+
+      console.log('👤 Usuario autenticado:', user.id);
+
+      // Verificar límites de optimización
+      if (post) {
+        const { data: optimizations, error: countError } = await supabase
+          .from('post_optimizations')
+          .select('id')
+          .eq('post_id', post.id);
+
+        if (countError) throw countError;
+        console.log('🔄 Optimizaciones previas:', optimizations?.length);
+
+        if (optimizations && optimizations.length >= 3) {
+          throw new Error('Has alcanzado el límite de optimizaciones para este post');
+        }
+      }
+
+      // Verificar límite mensual
+      const { data: monthlyCount, error: monthlyError } = await supabase
+        .rpc('get_monthly_optimizations', {
+          p_user_id: user.id
+        });
+
+      if (monthlyError) throw monthlyError;
+      console.log('📅 Optimizaciones mensuales:', monthlyCount);
+
+      if (monthlyCount >= MAX_MONTHLY_OPTIMIZATIONS) {
+        throw new Error('Has alcanzado el límite mensual de optimizaciones');
+      }
+
+      // Obtener recomendaciones y posts
+      const { data: recentRecommendation, error: recError } = await supabase
+        .from('recommendations')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('date_generated', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (recError) throw recError;
+      console.log('💡 Recomendaciones obtenidas:', recentRecommendation);
+
+      const oneYearAgo = new Date();
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+      const { data: topPosts, error: postsError } = await supabase
+        .from('linkedin_posts')
+        .select('*')
+        .eq('user_id', user.id)
+        .gte('date', oneYearAgo.toISOString())
+        .order('views', { ascending: false })
+        .limit(10);
+
+      if (postsError) throw postsError;
+      console.log('📊 Posts más exitosos:', topPosts);
+
+      // Generar el prompt
+      const prompt = `Eres un experto en comunicación digital y marketing de contenidos con amplia experiencia en LinkedIn. Tu tarea es optimizar un post sobre propósitos de año nuevo, manteniendo su tono personal y auténtico mientras incorporas las mejores prácticas de engagement.
+
+<post_original>
+${content}
+</post_original>
+
+<recomendaciones_engagement>
+${JSON.stringify(recentRecommendation, null, 2)}
+</recomendaciones_engagement>
+
+<posts_del_autor>
+${JSON.stringify(topPosts, null, 2)}
+</posts_del_autor>
+
+Para crear una versión mejorada del post, deberás seguir las instrucciones de <recomendaciones_engagement>, así como unas pautas adicionales:
+- Mantener el mensaje clave del post original
+- Conservar el tono habitual del autor en base a sus posts anteriores que encontrarás en <posts_del_autor>
+- Incorporar al menos una pregunta abierta que invite a la participación
+- Utilizar emojis estratégicamente para mejorar la legibilidad (solo si el autor los utiliza habitualmente en sus posts)
+- Estructurar el contenido con espaciado y formato visual atractivo
+- Incluir una llamada a la acción claro al final
+- Asegurar que el contenido sea conciso y directo
+
+Para validar la calidad del contenido optimizado, verifica que:
+- Mantiene la voz y personalidad del autor original
+- No excede la longitud recomendada
+- Incluye elementos visuales (emojis) de manera efectiva
+- Tiene una estructura clara y fácil de leer
+- Genera oportunidades de interacción
+- Conserva el valor y la utilidad del contenido original
+
+Proporciona el post mejorado en formato texto, listo para ser publicado en LinkedIn, manteniendo los saltos de línea y emojis apropiados.`;
+
+      console.log('📝 Prompt generado:', prompt);
+
+      // Inicializar el modelo dentro de la función
+      const model = getGoogleAI();
+      console.log('🤖 Modelo inicializado, enviando prompt...');
+
+      const result = await model.generateContent(prompt);
+      console.log('✨ Respuesta recibida:', result);
+      
+      const optimizedText = result.response.text();
+      console.log('📄 Texto optimizado:', optimizedText);
+
+      setOptimizedContent(optimizedText);
+
+      // Registrar la acción premium después de una optimización exitosa
+      if (optimizedContent) {
+        await registerAction('post_optimization', {
+          post_id: post?.id || 'new',
+          content_length: content.length,
+          optimized_length: optimizedContent.length
+        });
+      }
+
+    } catch (error: any) {
+      console.error('❌ Error al optimizar:', error);
+      setOptimizationError(
+        error.message || 
+        error.details || 
+        'Error al optimizar el contenido'
+      );
+    } finally {
+      setIsOptimizing(false);
+    }
+  };
+
+  const handleAcceptOptimization = async () => {
+    if (!optimizedContent || !post) return;
+
+    try {
+      // Guardar la optimización
+      const { error: optimizationError } = await supabase
+        .from('post_optimizations')
+        .insert([{
+          post_id: post.id,
+          user_id: (await supabase.auth.getUser()).data.user?.id,
+          original_content: content,
+          optimized_content: optimizedContent
+        }]);
+
+      if (optimizationError) throw optimizationError;
+
+      // Actualizar el contenido
+      setContent(optimizedContent);
+      setOptimizedContent(null);
+    } catch (error) {
+      console.error('Error al guardar la optimización:', error);
+      setError('Error al guardar la optimización');
+    }
+  };
+
   return (
     <Dialog open={true} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[700px]">
@@ -142,13 +378,13 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
 
             <Textarea
               value={content}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setContent(e.target.value)}
+              onChange={(e) => setContent(e.target.value)}
               placeholder="Escribe tu publicación aquí..."
               className="min-h-[200px]"
             />
 
             {!showScheduler && (
-              <div className="flex gap-2">
+              <div className="flex justify-between items-center">
                 <Select
                   value={state}
                   onValueChange={(value) => setState(value as PostState)}
@@ -162,6 +398,15 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
                     <SelectItem value="planificado">Planificado</SelectItem>
                   </SelectContent>
                 </Select>
+
+                <Button
+                  onClick={handleOptimizeWithAI}
+                  className="bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white"
+                  disabled={!content.trim() || isOptimizing || actionLoading}
+                >
+                  <Brain className="w-4 h-4 mr-2" />
+                  {isOptimizing || actionLoading ? 'Optimizando...' : 'Mejorar con IA'}
+                </Button>
               </div>
             )}
 
@@ -206,6 +451,21 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
                   </div>
                 </div>
               </div>
+            )}
+
+            {optimizationError && (
+              <div className="text-sm text-red-500 bg-red-50 p-2 rounded">
+                {optimizationError}
+              </div>
+            )}
+
+            {optimizedContent && (
+              <OptimizationDialog
+                originalContent={content}
+                optimizedContent={optimizedContent}
+                onAccept={handleAcceptOptimization}
+                onDiscard={() => setOptimizedContent(null)}
+              />
             )}
           </TabsContent>
 
@@ -281,10 +541,20 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
           </Button>
           <div className="flex gap-2">
             {!showScheduler && (
-              <Button variant="outline" onClick={handleSchedule}>
-                <Calendar className="w-4 h-4 mr-2" />
-                Planificar
-              </Button>
+              <>
+                <Button variant="outline" onClick={handleSchedule}>
+                  <Calendar className="w-4 h-4 mr-2" />
+                  Planificar
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={handleShareToLinkedIn}
+                  disabled={!content.trim()}
+                >
+                  <Share2 className="w-4 h-4 mr-2" />
+                  Publicar en LinkedIn
+                </Button>
+              </>
             )}
             <Button 
               onClick={showScheduler ? handleSaveSchedule : handleSave} 
