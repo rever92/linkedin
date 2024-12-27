@@ -13,4 +13,20 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    outDir: 'dist',
+    rollupOptions: {
+      output: {
+        format: 'es',
+        assetFileNames: 'assets/[name][extname]',
+        chunkFileNames: 'assets/[name].js',
+        entryFileNames: 'assets/[name].js',
+      }
+    }
+  },
+  server: {
+    headers: {
+      'Content-Type': 'application/javascript'
+    }
+  }
 });
