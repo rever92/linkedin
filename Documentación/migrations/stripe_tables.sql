@@ -1,0 +1,168 @@
+-- Tabla de productos de Stripe
+create table if not exists public.stripe_products (
+    id uuid primary key default uuid_generate_v4(),
+    stripe_product_id text unique not null,
+    name text not null,
+    description text,
+    active boolean default true,
+    metadata jsonb,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+-- Tabla de precios de Stripe
+create table if not exists public.stripe_prices (
+    id uuid primary key default uuid_generate_v4(),
+    stripe_price_id text unique not null,
+    stripe_product_id text references stripe_products(stripe_product_id),
+    active boolean default true,
+    currency text not null,
+    interval text not null,
+    interval_count integer not null,
+    unit_amount integer not null,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    constraint interval_check check (interval in ('day', 'week', 'month', 'year'))
+);
+
+-- Tabla de clientes de Stripe
+create table if not exists public.stripe_customers (
+    id uuid primary key default uuid_generate_v4(),
+    user_id uuid references auth.users not null unique,
+    stripe_customer_id text unique not null,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+);
+
+-- Tabla de suscripciones de Stripe
+create table if not exists public.stripe_subscriptions (
+    id uuid primary key default uuid_generate_v4(),
+    user_id uuid references auth.users not null,
+    stripe_subscription_id text unique not null,
+    stripe_customer_id text references stripe_customers(stripe_customer_id),
+    stripe_price_id text references stripe_prices(stripe_price_id),
+    status text not null,
+    cancel_at_period_end boolean default false,
+    current_period_start timestamptz not null,
+    current_period_end timestamptz not null,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now(),
+    constraint status_check check (status in ('trialing', 'active', 'canceled', 'incomplete', 'incomplete_expired', 'past_due', 'unpaid', 'paused'))
+);
+
+-- Políticas RLS
+alter table stripe_products enable row level security;
+alter table stripe_prices enable row level security;
+alter table stripe_customers enable row level security;
+alter table stripe_subscriptions enable row level security;
+
+-- Eliminar políticas existentes
+drop policy if exists "Productos visibles para usuarios autenticados" on stripe_products;
+drop policy if exists "Precios visibles para usuarios autenticados" on stripe_prices;
+drop policy if exists "Usuarios pueden ver su cliente" on stripe_customers;
+drop policy if exists "Usuarios pueden ver sus suscripciones" on stripe_subscriptions;
+
+-- Políticas para productos y precios (solo lectura para usuarios autenticados)
+create policy "Productos visibles para usuarios autenticados"
+    on stripe_products for select
+    to authenticated
+    using (true);
+
+create policy "Precios visibles para usuarios autenticados"
+    on stripe_prices for select
+    to authenticated
+    using (true);
+
+-- Políticas para clientes (solo ver/modificar propios)
+create policy "Usuarios pueden ver su cliente"
+    on stripe_customers for select
+    to authenticated
+    using (auth.uid() = user_id);
+
+-- Políticas para suscripciones (solo ver propias)
+create policy "Usuarios pueden ver sus suscripciones"
+    on stripe_subscriptions for select
+    to authenticated
+    using (auth.uid() = user_id);
+
+-- Triggers para updated_at
+create or replace function update_updated_at_column()
+returns trigger as $$
+begin
+    new.updated_at = now();
+    return new;
+end;
+$$ language plpgsql;
+
+-- Eliminar triggers existentes
+drop trigger if exists update_stripe_products_updated_at on stripe_products;
+drop trigger if exists update_stripe_prices_updated_at on stripe_prices;
+drop trigger if exists update_stripe_customers_updated_at on stripe_customers;
+drop trigger if exists update_stripe_subscriptions_updated_at on stripe_subscriptions;
+
+-- Crear triggers
+create trigger update_stripe_products_updated_at
+    before update on stripe_products
+    for each row
+    execute function update_updated_at_column();
+
+create trigger update_stripe_prices_updated_at
+    before update on stripe_prices
+    for each row
+    execute function update_updated_at_column();
+
+create trigger update_stripe_customers_updated_at
+    before update on stripe_customers
+    for each row
+    execute function update_updated_at_column();
+
+create trigger update_stripe_subscriptions_updated_at
+    before update on stripe_subscriptions
+    for each row
+    execute function update_updated_at_column();
+
+-- Eliminar políticas existentes si existen
+DROP POLICY IF EXISTS "Clientes visibles para usuarios autenticados" ON stripe_customers;
+DROP POLICY IF EXISTS "Permitir inserción desde función Edge" ON stripe_customers;
+
+-- Crear tabla de clientes de Stripe si no existe
+CREATE TABLE IF NOT EXISTS stripe_customers (
+  id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+  user_id UUID REFERENCES auth.users(id) NOT NULL,
+  stripe_customer_id TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  UNIQUE(user_id),
+  UNIQUE(stripe_customer_id)
+);
+
+-- Habilitar RLS
+ALTER TABLE stripe_customers ENABLE ROW LEVEL SECURITY;
+
+-- Políticas de seguridad para stripe_customers
+CREATE POLICY "Clientes visibles para usuarios autenticados"
+  ON stripe_customers
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Permitir inserción desde función Edge"
+  ON stripe_customers
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (true);
+
+-- Trigger para actualizar updated_at
+CREATE OR REPLACE FUNCTION update_stripe_customers_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = timezone('utc'::text, now());
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_stripe_customers_updated_at ON stripe_customers;
+CREATE TRIGGER update_stripe_customers_updated_at
+  BEFORE UPDATE ON stripe_customers
+  FOR EACH ROW
+  EXECUTE FUNCTION update_stripe_customers_updated_at(); 

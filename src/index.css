@@ -1,0 +1,100 @@
+/* index.css */
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans bg-background text-foreground;
+  }
+  :root {
+    --background: #ffffff;
+    --foreground: #000000;
+    --card: #FFFFFF;
+    --card-foreground: #000000;
+    --popover: #FFFFFF;
+    --popover-foreground: #000000;
+    --primary: #0a66c2;
+    --primary-foreground: #FFFFFF;
+    --secondary: #4ECDC4;
+    --secondary-foreground: #FFFFFF;
+    --muted: #F0F0F0;
+    --muted-foreground: #666666;
+    --accent: #4ECDC4;
+    --accent-foreground: #FFFFFF;
+    --destructive: #FF6B6B;
+    --destructive-foreground: #FFFFFF;
+    --border: #CCCCCC;
+    --input: #FFFFFF;
+    --ring: #0a66c2;
+    --radius: 0.5rem;
+    /* Colores para el gráfico */
+    --chart-1: #E85B4E;
+    --chart-2: #FF8C7C;
+    --chart-3: #FF6B6B;
+    --chart-4: #FFE8E6;
+    --chart-5: #4ECDC4;
+    --ai-primary: #e100ff;
+    --ai-secondary: #00f7ff;
+  }
+
+  .dark {
+    --background: #1A1A1A;
+    --foreground: #FFFFFF;
+    --card: #1A1A1A;
+    --card-foreground: #FFFFFF;
+    --popover: #1A1A1A;
+    --popover-foreground: #FFFFFF;
+    --primary: #4ECDC4;
+    --primary-foreground: #FFFFFF;
+    --secondary: #3B9B94;
+    --secondary-foreground: #FFFFFF;
+    --muted: #2D2D2D;
+    --muted-foreground: #CCCCCC;
+    --accent: #FF6B6B;
+    --accent-foreground: #FFFFFF;
+    --destructive: #FF6B6B;
+    --destructive-foreground: #FFFFFF;
+    --border: #333333;
+    --input: #2D2D2D;
+    --ring: #4ECDC4;
+    /* Colores para el gráfico */
+    --chart-1: #4ECDC4;
+    --chart-2: #45B7D1;
+    --chart-3: #96CEB4;
+    --chart-4: #FFEEAD;
+    --chart-5: #FF6B6B;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+@layer utilities {
+  .border-3 {
+    border-width: 3px;
+  }
+  .ai-gradient {
+    @apply bg-gradient-to-b from-[var(--ai-primary)] to-[var(--ai-secondary)];
+  }
+  
+  .ai-gradient-text {
+    @apply bg-clip-text text-transparent bg-gradient-to-b from-[var(--ai-primary)] to-[var(--ai-secondary)];
+  }
+
+  .ai-border-gradient {
+    border-image: linear-gradient(to bottom, var(--ai-primary), var(--ai-secondary)) 1;
+  }
+
+  .ai-spinner {
+    border-top-color: var(--ai-primary);
+    border-bottom-color: var(--ai-secondary);
+  }
+}
