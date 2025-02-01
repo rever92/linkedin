@@ -32,10 +32,10 @@ export default defineConfig({
     }
   },
   base: '/',
-  server: {
-    headers: {
-      // Esto sólo aplica en modo desarrollo local, probablemente no afecte en Plesk:
-      'Content-Type': 'application/javascript',
-    }
-  }
+  // server: {
+  //   headers: {
+  //     // Esto sólo aplica en modo desarrollo local, probablemente no afecte en Plesk:
+  //     'Content-Type': 'application/javascript',
+  //   }
+  // }
 })
