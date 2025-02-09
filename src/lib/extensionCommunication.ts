@@ -13,7 +13,7 @@ declare global {
 }
 
 // Reemplaza esto con el ID que copiaste de chrome://extensions/
-const EXTENSION_ID = 'ilmolncpbdoejhdlfckfaemieenfolpe'; 
+const EXTENSION_ID = 'akfigmhfdpiimkoahgglfdkadgiinhno'; 
 
 let sessionSent = false;
 

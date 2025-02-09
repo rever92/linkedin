@@ -20,6 +20,7 @@ import Analysis from './components/Analysis';
 import Pricing from './components/Pricing';
 import PlannerView from './components/Planner/PlannerView';
 import Auth from './components/Auth';
+import PrivacyPolicy from './components/PrivacyPolicy';
 import { ThemeProvider } from './lib/theme';
 
 interface ProtectedRouteProps {
@@ -138,6 +139,11 @@ export default function App() {
             <PlannerView />
           </ProtectedRoute>
         )}
+      />
+
+      <Route
+        path="/privacidad"
+        element={renderLayout(<PrivacyPolicy />)}
       />
 
       <Route path="/auth" element={<Navigate to="/login" replace />} />

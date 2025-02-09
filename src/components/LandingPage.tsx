@@ -1,5 +1,6 @@
 import { ArrowRight, BarChart2, Shield, Zap } from 'lucide-react';
 import { useState } from 'react';
+import Footer from './Footer';
 
 interface Feature {
   icon: React.ReactNode;
@@ -243,6 +244,8 @@ export default function LandingPage({ onLogin }: { onLogin: () => void }) {
           </button>
           <p className="mt-4">14 días gratis, sin compromisos.</p>
         </div>
+
+        <Footer />
       </div>
     </div>
   );
