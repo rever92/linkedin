@@ -22,15 +22,18 @@ Si tengo sesión iniciada pero voy a la landing, que aparezca en el navbar el bo
 Si no tengo sesión iniciada y voy a /dashboard/analysis, que me redireccione a /login (creo que tal vez tenemos que establecer la url de login)
 
 
+En el visualizador de timings, filtro para ver todo o ver solo huecos con más de 3 posts
+En planner, si hay un post planificado para hoy, que se muestre arriba destacado como "Post de hoy"
 
 
 # Otras mejoras
-
 Persistencia de sesión
-En el visualizador de timings, filtro para ver todo o ver solo huecos con más de 3 posts
+
+Quitar "Publicar publicacion"
+Quitar uno de los calendarios (el de la izda) en el form de programar
+
 
 Hacer el apartado de recomendaciones más intuitivo y estructurado
-En planner, si hay un post planificado para hoy, que se muestre arriba destacado como "Post de hoy"
 Editor wysiwyg para posts
 Si un usuario no tiene datos en su tabla de posts, no debería ver un dashboard vacío, sino que debería ver un mensaje de bienvenida, un vídeo de YouTube explicando cómo extraer sus datos y un botón para ir a descargar la extensión de Chrome.
 Página para gestionar tu suscripción

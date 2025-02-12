@@ -15,9 +15,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-import { format } from 'date-fns';
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "../ui/hover-card";
+import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { CalendarClock, Trash2, ArrowUpDown } from 'lucide-react';
+import { CalendarClock, Trash2, ArrowUpDown, Star, HelpCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { supabase } from '../../lib/supabase';
 import { Switch } from '../ui/switch';
@@ -38,11 +43,16 @@ interface PostListProps {
 export default function PostList({ posts, onPostSelect, onPostUpdate }: PostListProps) {
   const [filter, setFilter] = useState<PostState | 'todos'>('todos');
   const [sortBy, setSortBy] = useState<SortOption>('created_desc');
-  const [hideOldPosts, setHideOldPosts] = useState(false);
+  const [hideOldPosts, setHideOldPosts] = useState(true);
   const [schedulingPost, setSchedulingPost] = useState<Post | null>(null);
   const [scheduledDate, setScheduledDate] = useState('');
   const [scheduledTime, setScheduledTime] = useState('');
   const [postToDelete, setPostToDelete] = useState<Post | null>(null);
+
+  const isPostForToday = (post: Post) => {
+    if (!post.scheduled_datetime) return false;
+    return isToday(new Date(post.scheduled_datetime));
+  };
 
   const filteredPosts = posts.filter(post => {
     if (filter !== 'todos' && post.state !== filter) return false;
@@ -58,6 +68,12 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
   });
 
   const sortedPosts = [...filteredPosts].sort((a, b) => {
+    const aIsToday = isPostForToday(a);
+    const bIsToday = isPostForToday(b);
+    
+    if (aIsToday && !bIsToday) return -1;
+    if (!aIsToday && bIsToday) return 1;
+    
     switch (sortBy) {
       case 'created_asc':
         return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
@@ -200,121 +216,148 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
             checked={hideOldPosts}
             onCheckedChange={setHideOldPosts}
           />
-          <Label htmlFor="hide-old-posts" className="text-sm text-muted-foreground cursor-pointer">
-            Ocultar anteriores
-          </Label>
+          <div className="flex items-center gap-1">
+            <Label htmlFor="hide-old-posts" className="text-sm text-muted-foreground cursor-pointer">
+              Ocultar anteriores
+            </Label>
+            <HoverCard>
+              <HoverCardTrigger asChild>
+                <Button variant="ghost" size="icon" className="w-4 h-4 p-0">
+                  <HelpCircle className="w-4 h-4 text-muted-foreground/50" />
+                </Button>
+              </HoverCardTrigger>
+              <HoverCardContent align="start" className="w-80">
+                <p className="text-sm text-muted-foreground">
+                  Si está activo, oculta las publicaciones programadas con fecha anterior a hoy
+                </p>
+              </HoverCardContent>
+            </HoverCard>
+          </div>
         </div>
       </div>
 
       <div className="space-y-3">
-        {sortedPosts.map((post) => (
-          <div
-            key={post.id}
-            className="group p-6 bg-white border border-gray-200/50 shadow-md hover:shadow-lg transition-shadow duration-200 rounded-[25px]"
-          >
-            <div className="flex justify-between items-start gap-4">
-              <div 
-                className="flex-1 cursor-pointer"
-                onClick={() => onPostSelect(post)}
-              >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStateColor(post.state)}`}>
-                    {post.state}
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    Creado el {format(new Date(post.created_at), "d 'de' MMMM, yyyy", { locale: es })}
-                  </span>
+        {sortedPosts.map((post) => {
+          const isToday = isPostForToday(post);
+          return (
+            <div
+              key={post.id}
+              className={`group p-6 bg-white border transition-shadow duration-200 rounded-[25px] ${
+                isToday 
+                  ? 'border-blue-400 shadow-lg ring-2 ring-blue-200' 
+                  : 'border-gray-200/50 shadow-md hover:shadow-lg'
+              }`}
+            >
+              <div className="flex justify-between items-start gap-4">
+                <div 
+                  className="flex-1 cursor-pointer"
+                  onClick={() => onPostSelect(post)}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    {isToday && (
+                      <div className="flex items-center gap-1 text-blue-600 bg-blue-50 px-3 py-1 rounded-full text-xs font-medium">
+                        <Star className="w-3 h-3" />
+                        Post de hoy
+                      </div>
+                    )}
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStateColor(post.state)}`}>
+                      {post.state}
+                    </span>
+                    <span className="text-sm text-muted-foreground">
+                      Creado el {format(new Date(post.created_at), "d 'de' MMMM, yyyy", { locale: es })}
+                    </span>
+                  </div>
+                  <p className="line-clamp-2 text-foreground text-sm">
+                    {post.content}
+                  </p>
                 </div>
-                <p className="line-clamp-2 text-foreground text-sm">
-                  {post.content}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                {post.state !== 'planificado' && (
+                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {post.state !== 'planificado' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSchedulingPost(post)}
+                      className="hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950"
+                    >
+                      <CalendarClock className="w-4 h-4" />
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => setSchedulingPost(post)}
-                    className="hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950"
+                    onClick={() => setPostToDelete(post)}
+                    className="hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
                   >
-                    <CalendarClock className="w-4 h-4" />
+                    <Trash2 className="w-4 h-4" />
                   </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setPostToDelete(post)}
-                  className="hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                </div>
               </div>
-            </div>
-            
-            {post.scheduled_datetime && (
-              <p className="mt-3 text-sm text-muted-foreground flex items-center gap-2">
-                <CalendarClock className="w-4 h-4" />
-                Programado para: {format(new Date(post.scheduled_datetime), "d 'de' MMMM, yyyy HH:mm", { locale: es })}
-              </p>
-            )}
-
-            {schedulingPost?.id === post.id && (
-              <div className="mt-4 p-6 bg-white border border-gray-200/50 shadow-md rounded-[25px] space-y-4">
-                <h4 className="text-sm font-medium flex items-center gap-2">
+              
+              {post.scheduled_datetime && (
+                <p className="mt-3 text-sm text-muted-foreground flex items-center gap-2">
                   <CalendarClock className="w-4 h-4" />
-                  Programar publicación
-                </h4>
-                <div className="flex gap-4">
-                  <div className="flex-1 space-y-2">
-                    <label className="text-sm text-muted-foreground">Fecha</label>
-                    <input
-                      type="date"
-                      value={scheduledDate}
-                      onChange={(e) => setScheduledDate(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-[25px] border border-gray-200/50 shadow-sm bg-white"
-                    />
+                  Programado para: {format(new Date(post.scheduled_datetime), "d 'de' MMMM, yyyy HH:mm", { locale: es })}
+                </p>
+              )}
+
+              {schedulingPost?.id === post.id && (
+                <div className="mt-4 p-6 bg-white border border-gray-200/50 shadow-md rounded-[25px] space-y-4">
+                  <h4 className="text-sm font-medium flex items-center gap-2">
+                    <CalendarClock className="w-4 h-4" />
+                    Programar publicación
+                  </h4>
+                  <div className="flex gap-4">
+                    <div className="flex-1 space-y-2">
+                      <label className="text-sm text-muted-foreground">Fecha</label>
+                      <input
+                        type="date"
+                        value={scheduledDate}
+                        onChange={(e) => setScheduledDate(e.target.value)}
+                        className="w-full px-3 py-1.5 rounded-[25px] border border-gray-200/50 shadow-sm bg-white"
+                      />
+                    </div>
+                    <div className="w-32 space-y-2">
+                      <label className="text-sm text-muted-foreground">Hora</label>
+                      <select
+                        value={scheduledTime}
+                        onChange={(e) => setScheduledTime(e.target.value)}
+                        className="w-full px-3 py-1.5 rounded-[25px] border border-gray-200/50 shadow-sm bg-white"
+                      >
+                        <option value="">Seleccionar</option>
+                        {Array.from({ length: 96 }, (_, i) => {
+                          const hour = Math.floor(i / 4);
+                          const minute = (i % 4) * 15;
+                          const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+                          return (
+                            <option key={time} value={time}>
+                              {time}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
                   </div>
-                  <div className="w-32 space-y-2">
-                    <label className="text-sm text-muted-foreground">Hora</label>
-                    <select
-                      value={scheduledTime}
-                      onChange={(e) => setScheduledTime(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-[25px] border border-gray-200/50 shadow-sm bg-white"
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSchedulingPost(null)}
                     >
-                      <option value="">Seleccionar</option>
-                      {Array.from({ length: 96 }, (_, i) => {
-                        const hour = Math.floor(i / 4);
-                        const minute = (i % 4) * 15;
-                        const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-                        return (
-                          <option key={time} value={time}>
-                            {time}
-                          </option>
-                        );
-                      })}
-                    </select>
+                      Cancelar
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleSchedule(post)}
+                      disabled={!scheduledDate || !scheduledTime}
+                    >
+                      Programar
+                    </Button>
                   </div>
                 </div>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSchedulingPost(null)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => handleSchedule(post)}
-                    disabled={!scheduledDate || !scheduledTime}
-                  >
-                    Programar
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          );
+        })}
 
         {sortedPosts.length === 0 && (
           <div className="text-center py-8 text-muted-foreground">

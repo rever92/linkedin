@@ -327,6 +327,7 @@ export default function PostsTable({ data }: PostsTableProps) {
                 { key: 'likes', label: 'Reacciones' },
                 { key: 'comments', label: 'Comentarios' },
                 { key: 'shares', label: 'Compartidos' },
+                { key: 'post_type', label: 'Tipo' },
                 { key: 'category', label: 'Temas'}
               ].map(({ key, label }) => (
                 <th
@@ -362,6 +363,9 @@ export default function PostsTable({ data }: PostsTableProps) {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {post.shares.toLocaleString()}
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
+                  {post.post_type || '-'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {post.category ? post.category : <span className="loader">Cargando...</span>}

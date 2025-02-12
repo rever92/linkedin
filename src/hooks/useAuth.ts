@@ -24,7 +24,7 @@ export const useAuth = () => {
 
     const initialize = async () => {
       try {
-        // Obtener la sesión del servidor
+        // Intentar recuperar la sesión almacenada
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (mounted) {
@@ -35,6 +35,24 @@ export const useAuth = () => {
             session,
             isLoading: false,
           }));
+
+          // Si hay una sesión, verificar y refrescar el token si es necesario
+          if (session) {
+            const { data: { session: refreshedSession }, error: refreshError } = 
+              await supabase.auth.refreshSession();
+            
+            if (refreshError) {
+              console.error('Error al refrescar la sesión:', refreshError);
+              // Si hay un error al refrescar, intentamos cerrar sesión y redirigir
+              await supabase.auth.signOut();
+              navigate('/login');
+            } else if (refreshedSession && mounted) {
+              setState(prev => ({
+                ...prev,
+                session: refreshedSession,
+              }));
+            }
+          }
         }
       } catch (error) {
         console.error('Error al inicializar la autenticación:', error);
@@ -52,22 +70,52 @@ export const useAuth = () => {
 
     // Suscribirse a cambios en la autenticación
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
+      async (event, newSession) => {
         if (mounted) {
-          setState(prev => ({
-            ...prev,
-            session: newSession,
-            isLoading: false,
-          }));
+          console.log('Cambio en el estado de autenticación:', event);
+          
+          if (event === 'SIGNED_OUT') {
+            // Limpiar el estado local
+            setState(prev => ({
+              ...prev,
+              session: null,
+              isLoading: false,
+            }));
+            // Redirigir al login
+            navigate('/login');
+          } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+            setState(prev => ({
+              ...prev,
+              session: newSession,
+              isLoading: false,
+            }));
+          }
         }
       }
     );
 
+    // Configurar un intervalo para refrescar el token periódicamente
+    const refreshInterval = setInterval(async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: { session: refreshedSession }, error: refreshError } = 
+          await supabase.auth.refreshSession();
+        
+        if (!refreshError && refreshedSession && mounted) {
+          setState(prev => ({
+            ...prev,
+            session: refreshedSession,
+          }));
+        }
+      }
+    }, 10 * 60 * 1000); // Refrescar cada 10 minutos
+
     return () => {
       mounted = false;
       subscription.unsubscribe();
+      clearInterval(refreshInterval);
     };
-  }, []);
+  }, [navigate]);
 
   const signOut = async () => {
     try {
