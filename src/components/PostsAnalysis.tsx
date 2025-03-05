@@ -195,7 +195,7 @@ const PostsAnalysis = ({ data }: PostsAnalysisProps) => {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
-      setSortDirection('asc');
+      setSortDirection('desc');
     }
   };
 
@@ -203,13 +203,27 @@ const PostsAnalysis = ({ data }: PostsAnalysisProps) => {
   const sortedCategoryData = [...categoryData]
     .filter(category => (category.views / category.count) > 0)
     .sort((a, b) => {
-      const aValue = sortField === 'engagementRate' ? a.engagementRate : a[sortField];
-      const bValue = sortField === 'engagementRate' ? b.engagementRate : b[sortField];
+      // Para campos numéricos, usar comparación numérica
+      if (sortField !== 'category') {
+        // Asegurar que los valores son números
+        const aValue = Number(a[sortField]);
+        const bValue = Number(b[sortField]);
+        
+        if (sortDirection === 'asc') {
+          return aValue - bValue;
+        } else {
+          return bValue - aValue;
+        }
+      }
+      
+      // Para el campo 'category', usar comparación de cadenas
+      const aValue = String(a.category || '');
+      const bValue = String(b.category || '');
 
       if (sortDirection === 'asc') {
-        return aValue > bValue ? 1 : -1;
+        return aValue.localeCompare(bValue);
       } else {
-        return aValue < bValue ? 1 : -1;
+        return bValue.localeCompare(aValue);
       }
     });
 

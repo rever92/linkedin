@@ -25,13 +25,23 @@ Si no tengo sesión iniciada y voy a /dashboard/analysis, que me redireccione a 
 En el visualizador de timings, filtro para ver todo o ver solo huecos con más de 3 posts
 En planner, si hay un post planificado para hoy, que se muestre arriba destacado como "Post de hoy"
 
-
-# Otras mejoras
 Persistencia de sesión
 
-Quitar "Publicar publicacion"
-Quitar uno de los calendarios (el de la izda) en el form de programar
+En analysis/posts cuando ordenas por cualquiera de las columnas de valor numérico, la ordenación no es correcta. Debería coger la totalidad de los posts y hacer la ordenación en base a ellos. Además, me gustaría que al lado del texto truncado de la publicación se muestre un icono con el hipervínculo a la publicación, así como que al hacer click sobre el texto, se cargue un popup con el texto completo de la publicación. 
 
+Al aplicar una mejora con IA de un post, se crea un duplicado del post, y lo que debería hacer es "sobreescribirlo".
+
+En /planner/calendar, si hago click en una fecha que esté vacía, debería abrir también el popup de "Nueva publicación" para crear una publicación para ese día concreto (aún sin hora)
+
+Al ir a programar una publicación, en el calendario que se muestren con algún indicador los días que ya tienen una o más publicaciones programadas.
+
+# NEXT _______________________________________________________________________________
+
+
+
+
+
+ 
 
 Hacer el apartado de recomendaciones más intuitivo y estructurado
 Editor wysiwyg para posts

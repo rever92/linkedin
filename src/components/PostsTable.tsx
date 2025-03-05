@@ -1,7 +1,7 @@
 // PostsTable.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { LinkedInPost } from '../types';
-import { ChevronUp, ChevronDown, Search } from 'lucide-react';
+import { ChevronUp, ChevronDown, Search, ExternalLink, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { usePremiumActions } from '../hooks/usePremiumActions';
@@ -24,6 +24,7 @@ export default function PostsTable({ data }: PostsTableProps) {
   const [waitTime, setWaitTime] = useState<number>(0);
   const [postsToProcess, setPostsToProcess] = useState<LinkedInPost[]>([]);
   const { registerAction, checkBatchAnalysisLimit } = usePremiumActions();
+  const [selectedPost, setSelectedPost] = useState<LinkedInPost | null>(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -250,25 +251,38 @@ export default function PostsTable({ data }: PostsTableProps) {
   }, [data]);
 
   const sortedAndFilteredData = useMemo(() => {
-    return filteredData
-      .filter(post => 
-        post.text.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-      .sort((a, b) => {
-        if (sortField === 'date') {
-          return sortDirection === 'asc' 
-            ? new Date(a.date).getTime() - new Date(b.date).getTime()
-            : new Date(b.date).getTime() - new Date(a.date).getTime();
-        }
+    // Primero filtramos los datos
+    const filtered = filteredData.filter(post => 
+      post.text.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    
+    // Luego ordenamos los datos filtrados
+    return [...filtered].sort((a, b) => {
+      // Ordenación por fecha
+      if (sortField === 'date') {
+        return sortDirection === 'asc' 
+          ? new Date(a.date).getTime() - new Date(b.date).getTime()
+          : new Date(b.date).getTime() - new Date(a.date).getTime();
+      }
+      
+      // Ordenación numérica para campos numéricos
+      if (['views', 'likes', 'comments', 'shares'].includes(sortField)) {
+        // Asegurarnos de que estamos tratando con números
+        const aValue = Number(a[sortField as keyof LinkedInPost] || 0);
+        const bValue = Number(b[sortField as keyof LinkedInPost] || 0);
         
-        const aValue = String(a[sortField] || '');
-        const bValue = String(b[sortField] || '');
-        
-        if (sortDirection === 'asc') {
-          return aValue.localeCompare(bValue);
-        }
-        return bValue.localeCompare(aValue);
-      });
+        // Ordenar de forma numérica
+        return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+      }
+      
+      // Ordenación de texto para otros campos
+      const aValue = String(a[sortField as keyof LinkedInPost] || '');
+      const bValue = String(b[sortField as keyof LinkedInPost] || '');
+      
+      return sortDirection === 'asc' 
+        ? aValue.localeCompare(bValue) 
+        : bValue.localeCompare(aValue);
+    });
   }, [filteredData, sortField, sortDirection, searchTerm]);
 
   const paginatedData = useMemo(() => {
@@ -300,6 +314,14 @@ export default function PostsTable({ data }: PostsTableProps) {
   const handlePostsPerPageChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
     setPostsPerPage(Number(event.target.value));
     setCurrentPage(0);
+  };
+
+  const openPostModal = (post: LinkedInPost) => {
+    setSelectedPost(post);
+  };
+
+  const closePostModal = () => {
+    setSelectedPost(null);
   };
 
   return (
@@ -350,7 +372,22 @@ export default function PostsTable({ data }: PostsTableProps) {
                   {new Date(post.date).toLocaleDateString()}
                 </td>
                 <td className="px-6 py-4 text-sm text-gray-900 dark:text-gray-100">
-                  <div className="max-w-xl truncate">{post.text}</div>
+                  <div className="flex items-center space-x-2">
+                    <div 
+                      className="max-w-xl truncate cursor-pointer hover:text-blue-500" 
+                      onClick={() => openPostModal(post)}
+                    >
+                      {post.text}
+                    </div>
+                    <a 
+                      href={post.url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="text-blue-500 hover:text-blue-700"
+                    >
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-300">
                   {post.views.toLocaleString()}
@@ -376,15 +413,34 @@ export default function PostsTable({ data }: PostsTableProps) {
         </table>
       </div>
       <div className="p-4 flex justify-between items-center">
-        <select 
-          value={postsPerPage} 
-          onChange={handlePostsPerPageChange} 
-          className="border rounded-md p-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
-        >
-          {[10, 25, 50, 100].map((num) => (
-            <option key={num} value={num}>{num} publicaciones</option>
-          ))}
-        </select>
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 0}
+            className="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded-md disabled:opacity-50"
+          >
+            Anterior
+          </button>
+          <span>
+            Página {currentPage + 1} de {Math.max(1, Math.ceil(sortedAndFilteredData.length / postsPerPage))}
+          </span>
+          <button
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage >= Math.ceil(sortedAndFilteredData.length / postsPerPage) - 1}
+            className="px-3 py-1 bg-gray-200 dark:bg-gray-700 rounded-md disabled:opacity-50"
+          >
+            Siguiente
+          </button>
+          <select 
+            value={postsPerPage} 
+            onChange={handlePostsPerPageChange} 
+            className="border rounded-md p-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+          >
+            {[10, 25, 50, 100].map((num) => (
+              <option key={num} value={num}>{num} publicaciones</option>
+            ))}
+          </select>
+        </div>
         
         {/* Botón para enviar lote */}
         <div className="flex items-center space-x-4">
@@ -405,6 +461,53 @@ export default function PostsTable({ data }: PostsTableProps) {
           )}
         </div>
       </div>
+
+      {/* Modal para mostrar el texto completo */}
+      {selectedPost && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Publicación</h3>
+              <button 
+                onClick={closePostModal}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="mb-4">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Fecha: {new Date(selectedPost.date).toLocaleDateString()}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Tipo: {selectedPost.post_type || '-'}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Categoría: {selectedPost.category || 'Sin categoría'}
+              </p>
+            </div>
+            <div className="mb-4 whitespace-pre-wrap text-gray-900 dark:text-gray-100">
+              {selectedPost.text}
+            </div>
+            <div className="flex justify-between items-center text-sm text-gray-500 dark:text-gray-400">
+              <div>
+                <span className="mr-4">👁️ {selectedPost.views.toLocaleString()}</span>
+                <span className="mr-4">👍 {selectedPost.likes.toLocaleString()}</span>
+                <span className="mr-4">💬 {selectedPost.comments.toLocaleString()}</span>
+                <span>🔄 {selectedPost.shares.toLocaleString()}</span>
+              </div>
+              <a 
+                href={selectedPost.url} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-blue-500 hover:text-blue-700 flex items-center"
+              >
+                Ver en LinkedIn <ExternalLink className="w-4 h-4 ml-1" />
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

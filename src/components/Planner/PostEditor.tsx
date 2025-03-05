@@ -20,13 +20,17 @@ import {
 } from '../ui/select';
 import { Input } from '../ui/input';
 import { format } from 'date-fns';
-import { Calendar, Clock, Image as ImageIcon, Share2, Brain } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Image as ImageIcon, Brain, Sparkles } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog as DialogPrimitive } from '@radix-ui/react-dialog';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import ReactMarkdown from 'react-markdown';
 import { usePremiumActions } from '../../hooks/usePremiumActions';
 import { motion } from 'framer-motion';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Calendar } from '../ui/calendar';
+import { es } from 'date-fns/locale';
+import { cn } from '../../lib/utils';
 
 // Mover la inicialización dentro de una función para evitar problemas con import.meta
 const getGoogleAI = () => {
@@ -39,8 +43,10 @@ const MAX_MONTHLY_OPTIMIZATIONS = 30;
 
 interface PostEditorProps {
   post?: Post | null;
+  initialDate?: string; // Fecha inicial para un nuevo post
   onClose: () => void;
   onSave: () => void;
+  allPosts?: Post[]; // Lista de todos los posts para identificar fechas ocupadas
 }
 
 const imageStyles = [
@@ -51,62 +57,13 @@ const imageStyles = [
   { id: 'watercolor', name: 'Acuarela', preview: '/styles/watercolor.png' },
 ];
 
-interface OptimizationDialogProps {
-  originalContent: string;
-  optimizedContent: string;
-  onAccept: () => void;
-  onDiscard: () => void;
-}
-
-const OptimizationDialog: React.FC<OptimizationDialogProps> = ({
-  originalContent,
-  optimizedContent,
-  onAccept,
-  onDiscard
-}) => (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center">
-    <div className="bg-white rounded-lg p-6 w-[90vw] max-w-4xl max-h-[90vh] overflow-y-auto">
-      <h2 className="text-xl font-bold mb-4">Comparación de Contenido</h2>
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <h3 className="font-medium mb-2">Original</h3>
-          <div className="p-4 bg-gray-50 rounded-lg whitespace-pre-wrap">
-            {originalContent}
-          </div>
-        </div>
-        <div>
-          <h3 className="font-medium mb-2">Optimizado</h3>
-          <motion.div
-            className="p-1 bg-purple-50 rounded-lg prose prose-sm max-w-none relative overflow-hidden border-[1px] border-opacity-30"
-            initial={{ background: 'conic-gradient(from 0deg, var(--ai-secondary), var(--ai-primary), var(--ai-secondary))' }}
-            animate={{ background: 'conic-gradient(from 360deg, var(--ai-secondary), var(--ai-primary), var(--ai-secondary))' }}
-            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
-          >
-            <div className="bg-white bg-opacity-90 p-4 rounded-lg">
-              <ReactMarkdown>{optimizedContent}</ReactMarkdown>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-      <div className="flex justify-end gap-2 mt-4">
-        <Button variant="outline" onClick={onDiscard}>
-          Descartar
-        </Button>
-        <Button onClick={onAccept}>
-          Aceptar cambios
-        </Button>
-      </div>
-    </div>
-  </div>
-);
-
-export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
+export default function PostEditor({ post, initialDate, onClose, onSave, allPosts = [] }: PostEditorProps) {
   const [content, setContent] = useState(post?.content || '');
   const [state, setState] = useState<PostState>(post?.state || 'borrador');
   const [scheduledDate, setScheduledDate] = useState(
     post?.scheduled_datetime
       ? format(new Date(post.scheduled_datetime), 'yyyy-MM-dd')
-      : ''
+      : initialDate || ''
   );
   const [scheduledTime, setScheduledTime] = useState(
     post?.scheduled_datetime
@@ -115,16 +72,19 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
   );
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showScheduler, setShowScheduler] = useState(false);
   const [imagePrompt, setImagePrompt] = useState('');
   const [selectedStyle, setSelectedStyle] = useState(imageStyles[0].id);
   const [generatedImages, setGeneratedImages] = useState<AIGeneratedImage[]>([]);
   const [activeTab, setActiveTab] = useState<'content' | 'image'>('content');
   const [optimizedContent, setOptimizedContent] = useState<string | null>(null);
+  const [originalContent, setOriginalContent] = useState<string | null>(null);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationError, setOptimizationError] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
   const {
     registerAction,
     checkPostOptimizationLimit,
@@ -132,20 +92,21 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
     error: actionError
   } = usePremiumActions();
   const [currentPostId, setCurrentPostId] = useState<string | null>(post?.id || null);
+  const [isNewPostCreated, setIsNewPostCreated] = useState(false);
 
-  const handleSchedule = () => {
-    setShowScheduler(true);
-    setState('planificado');
-  };
-
-  const handleSaveSchedule = () => {
-    if (!scheduledDate || !scheduledTime) {
-      setError('Por favor, selecciona una fecha y hora');
-      return;
+  // Si se proporciona una fecha inicial, mostrar automáticamente el programador
+  useEffect(() => {
+    if (initialDate && !post) {
+      setState('planificado');
     }
-    setShowScheduler(false);
-    handleSave();
-  };
+  }, [initialDate, post]);
+
+  // Efecto para cambiar el estado a "planificado" cuando se selecciona una fecha
+  useEffect(() => {
+    if (scheduledDate && state !== 'planificado') {
+      setState('planificado');
+    }
+  }, [scheduledDate]);
 
   const handleGenerateImage = async () => {
     // Aquí iría la lógica de generación de imágenes
@@ -156,32 +117,45 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
     setIsSaving(true);
     setError(null);
     try {
+      // Si hay fecha pero no hora, establecemos una hora predeterminada (00:00)
+      const finalScheduledTime = scheduledDate && !scheduledTime ? '00:00' : scheduledTime;
+      
       const postData = {
         content,
         state,
-        scheduled_datetime: state === 'planificado' && scheduledDate && scheduledTime
-          ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
+        scheduled_datetime: state === 'planificado' && scheduledDate
+          ? new Date(`${scheduledDate}T${finalScheduledTime || '00:00'}`).toISOString()
           : null,
         user_id: (await supabase.auth.getUser()).data.user?.id
       };
 
-      if (post) {
+      if (currentPostId) {
         // Actualizar post existente
         const { error } = await supabase
           .from('posts')
           .update(postData)
-          .eq('id', post.id);
+          .eq('id', currentPostId);
 
         if (error) throw error;
       } else {
         // Crear nuevo post
-        const { error } = await supabase
+        const { data: newPost, error } = await supabase
           .from('posts')
-          .insert([postData]);
+          .insert([postData])
+          .select()
+          .single();
 
         if (error) throw error;
+        if (newPost) {
+          setCurrentPostId(newPost.id);
+          setIsNewPostCreated(true);
+        }
       }
 
+      // Mostrar mensaje de éxito temporal
+      setSuccessMessage("✅ Post guardado correctamente");
+      setTimeout(() => setSuccessMessage(null), 3000);
+      
       onSave();
     } catch (error: any) {
       console.error('Error al guardar el post:', error);
@@ -191,14 +165,14 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
     }
   };
 
-  const handleShareToLinkedIn = () => {
-    const encodedText = encodeURIComponent(content);
-    const linkedInUrl = `https://www.linkedin.com/feed/?linkOrigin=LI_BADGE&shareActive=true&text=${encodedText}`;
-    window.open(linkedInUrl, '_blank');
-  };
-
   const handleOptimizeWithAI = async () => {
     try {
+      // Verificar que hay contenido para optimizar
+      if (content.trim() === '') {
+        setOptimizationError('No hay contenido para optimizar. Por favor, escribe algo primero.');
+        return;
+      }
+
       // Verificar límites antes de proceder
       const canOptimize = await checkPostOptimizationLimit(currentPostId || 'new');
       if (!canOptimize) {
@@ -208,18 +182,22 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
 
       setIsOptimizing(true);
       setOptimizationError(null);
+      // Guardar el contenido original antes de optimizar
+      setOriginalContent(content);
 
       const { data: { user }, error: userError } = await supabase.auth.getUser();
       if (userError) throw userError;
       if (!user) throw new Error('Usuario no autenticado');
 
-      // Si el post no existe, guardarlo primero
+      // Si el post no existe, guardarlo primero como borrador temporal
       let postId = currentPostId;
+      
       if (!postId) {
         try {
+          console.log('💾 Guardando borrador temporal antes de optimizar...');
           const postData = {
             content,
-            state,
+            state: 'borrador', // Siempre guardar como borrador inicialmente
             scheduled_datetime: state === 'planificado' && scheduledDate && scheduledTime
               ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
               : null,
@@ -237,10 +215,42 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
 
           postId = newPost.id;
           setCurrentPostId(postId); // Actualizar el estado con el nuevo ID
-          console.log('📝 Post guardado con ID:', postId);
+          setIsNewPostCreated(true);
+          console.log('📝 Borrador temporal guardado con ID:', postId);
+          
+          // Mostrar mensaje informativo
+          setSuccessMessage("Se ha guardado un borrador temporal para optimizar");
+          setTimeout(() => setSuccessMessage(null), 3000);
         } catch (error: any) {
-          console.error('Error al guardar el post:', error);
+          console.error('❌ Error al guardar el borrador temporal:', error);
           throw new Error('Error al guardar el post: ' + error.message);
+        }
+      } else {
+        console.log('🔄 Optimizando post existente con ID:', postId);
+        
+        // Si hay cambios pendientes, actualizar el post antes de optimizarlo
+        if (hasChanges()) {
+          console.log('📝 Actualizando post existente antes de optimizar...');
+          const postData = {
+            content,
+            state,
+            scheduled_datetime: state === 'planificado' && scheduledDate && scheduledTime
+              ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
+              : null,
+            user_id: user.id
+          };
+          
+          const { error: updateError } = await supabase
+            .from('posts')
+            .update(postData)
+            .eq('id', postId);
+            
+          if (updateError) {
+            console.error('❌ Error al actualizar el post:', updateError);
+            throw updateError;
+          }
+          
+          console.log('✅ Post actualizado antes de optimizar');
         }
       }
 
@@ -265,7 +275,7 @@ export default function PostEditor({ post, onClose, onSave }: PostEditorProps) {
         .limit(1)
         .single();
 
-      if (recError) throw recError;
+      if (recError && recError.code !== 'PGRST116') throw recError;
 
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
@@ -288,11 +298,11 @@ ${content}
 </post_original>
 
 <recomendaciones_engagement>
-${JSON.stringify(recentRecommendation, null, 2)}
+${JSON.stringify(recentRecommendation || {}, null, 2)}
 </recomendaciones_engagement>
 
 <posts_del_autor>
-${JSON.stringify(topPosts, null, 2)}
+${JSON.stringify(topPosts || [], null, 2)}
 </posts_del_autor>
 
 Para crear una versión mejorada del post, deberás seguir las instrucciones de <recomendaciones_engagement>, así como unas pautas adicionales:
@@ -303,6 +313,7 @@ Para crear una versión mejorada del post, deberás seguir las instrucciones de 
 - Estructurar el contenido con espaciado y formato visual atractivo
 - Incluir una llamada a la acción claro al final
 - Asegurar que el contenido sea conciso y directo
+- Respeta siempre el idioma original en el que suele publicar el usuario, aunque parte del contenido del borrador de la nueva publicación esté en otro idioma. 
 
 Para validar la calidad del contenido optimizado, verifica que:
 - Mantiene la voz y personalidad del autor original
@@ -327,6 +338,7 @@ Proporciona el post mejorado en formato texto, listo para ser publicado en Linke
       console.log('📄 Texto optimizado:', optimizedText);
 
       setOptimizedContent(optimizedText);
+      setShowComparison(true);
 
     } catch (error: any) {
       console.error('❌ Error al optimizar:', error);
@@ -344,39 +356,69 @@ Proporciona el post mejorado en formato texto, listo para ser publicado en Linke
     if (!optimizedContent) return;
 
     try {
+      setIsSaving(true);
       // Usar el ID almacenado en el estado
       const postId = currentPostId;
       if (!postId) {
         throw new Error('No se encontró el ID del post');
       }
 
-      // Guardar la optimización
+      // Guardar la optimización en la tabla de historial
       const { error: optimizationError } = await supabase
         .from('post_optimizations')
         .insert([{
           post_id: postId,
           user_id: (await supabase.auth.getUser()).data.user?.id,
-          original_content: content,
+          original_content: originalContent || content,
           optimized_content: optimizedContent
         }]);
 
       if (optimizationError) throw optimizationError;
 
-      // Actualizar el contenido
+      // Actualizar el contenido en el estado local
       setContent(optimizedContent);
-      setOptimizedContent(null);
-
+      
       // Actualizar el post con el nuevo contenido
       const { error: updateError } = await supabase
         .from('posts')
-        .update({ content: optimizedContent })
+        .update({ 
+          content: optimizedContent,
+          // Si es un post nuevo creado como borrador, mantener el estado que el usuario haya seleccionado
+          state: state
+        })
         .eq('id', postId);
 
       if (updateError) throw updateError;
+      
+      // Cerrar la comparación
+      setShowComparison(false);
+      setOptimizedContent(null);
+      setOriginalContent(null);
+      
+      console.log('✅ Post actualizado correctamente con el contenido optimizado');
+      // Mostrar mensaje de éxito temporal
+      setSuccessMessage("✅ Optimización aplicada correctamente");
+      // Limpiar el mensaje después de 3 segundos
+      setTimeout(() => setSuccessMessage(null), 3000);
 
     } catch (error: any) {
       console.error('Error al guardar la optimización:', error);
       setError('Error al guardar la optimización: ' + error.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDiscardOptimization = () => {
+    setShowComparison(false);
+    setOptimizedContent(null);
+    setOriginalContent(null);
+    
+    // Si es un post nuevo que se creó solo para optimizar y el usuario descarta la optimización,
+    // mostrar un mensaje informativo
+    if (isNewPostCreated && !post) {
+      setSuccessMessage("Se ha guardado un borrador con tu contenido original");
+      setTimeout(() => setSuccessMessage(null), 3000);
     }
   };
 
@@ -409,227 +451,328 @@ Proporciona el post mejorado en formato texto, listo para ser publicado en Linke
     }
   };
 
+  // Función para determinar si una fecha tiene posts programados
+  const hasScheduledPostsOnDate = (date: Date) => {
+    try {
+      // Convertir la fecha a formato YYYY-MM-DD para comparar solo la fecha sin la hora
+      const dateString = format(date, 'yyyy-MM-dd');
+      
+      return allPosts.some(p => {
+        if (!p.scheduled_datetime) return false;
+        const postDate = format(new Date(p.scheduled_datetime), 'yyyy-MM-dd');
+        return postDate === dateString && (currentPostId !== p.id); // Excluir el post actual
+      });
+    } catch (error) {
+      console.error('Error al verificar posts programados:', error);
+      return false;
+    }
+  };
+
   return (
     <>
       <Dialog open={true} onOpenChange={handleClose}>
-        <DialogContent className="sm:max-w-[700px]">
-          <DialogHeader>
-            <DialogTitle>
-              {post ? 'Editar Publicación' : 'Nueva Publicación'}
-            </DialogTitle>
-            <DialogDescription>
-              {post ? 'Modifica los detalles de tu publicación' : 'Crea una nueva publicación para LinkedIn'}
-            </DialogDescription>
-          </DialogHeader>
-
-          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'content' | 'image')}>
-            <TabsList>
-              <TabsTrigger value="content">Contenido</TabsTrigger>
-              <TabsTrigger value="image">Imagen</TabsTrigger>
-            </TabsList>
-
-            <TabsContent value="content" className="space-y-4">
-              {error && (
-                <div className="text-sm text-red-500 bg-red-50 p-2 rounded">
-                  {error}
-                </div>
-              )}
-
-              <Textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Escribe tu publicación aquí..."
-                className="min-h-[200px]"
-              />
-
-              {!showScheduler && (
-                <div className="flex justify-between items-center">
-                  <Select
-                    value={state}
-                    onValueChange={(value) => setState(value as PostState)}
+        <DialogContent className="sm:max-w-[800px] p-0 overflow-hidden bg-white shadow-lg">
+          <div className="flex h-full flex-col">
+            {/* Header */}
+            <div className="px-6 pt-4 pb-2 border-b">
+              <h2 className="text-xl font-medium text-gray-800 ">
+                {post ? 'Editar Publicación' : 'Nueva Publicación'}
+              </h2>
+              <p className="text-sm text-gray-500 mt-1 ">
+                {post ? 'Modifica los detalles de tu publicación' : 'Crea una nueva publicación para LinkedIn'}
+              </p>
+            </div>
+            
+            {/* Tabs */}
+            <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'content' | 'image')} className="flex-1 flex flex-col">
+              <div className="border-b px-6">
+                <TabsList className="h-10 w-full bg-transparent border-b-0 justify-start gap-6 p-0">
+                  <TabsTrigger 
+                    value="content" 
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:shadow-none rounded-none px-0 py-2 h-10 bg-transparent text-gray-600 data-[state=active]:text-blue-600 font-medium "
                   >
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="Estado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="borrador">Borrador</SelectItem>
-                      <SelectItem value="listo">Listo</SelectItem>
-                      <SelectItem value="planificado">Planificado</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    Contenido
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="image" 
+                    className="data-[state=active]:border-b-2 data-[state=active]:border-blue-600 data-[state=active]:shadow-none rounded-none px-0 py-2 h-10 bg-transparent text-gray-600 data-[state=active]:text-blue-600 font-medium "
+                  >
+                    Imagen
+                  </TabsTrigger>
+                </TabsList>
+              </div>
 
-                  <motion.div
-                    animate={isOptimizing ? {
-                      background: ['conic-gradient(from 0deg at 50% 50%, var(--ai-secondary), var(--ai-primary), var(--ai-secondary))',
-                                 'conic-gradient(from 360deg at 50% 50%, var(--ai-secondary), var(--ai-primary), var(--ai-secondary))']
-                    } : {
-                      background: 'linear-gradient(to right, var(--ai-secondary), var(--ai-primary))'
-                    }}
-                    className="rounded-md overflow-hidden"
-                    transition={{ duration: 3, repeat: Infinity, ease: "linear" }}>
-                    <Button
-                      onClick={handleOptimizeWithAI}
-                      className="relative bg-transparent hover:opacity-90 text-white w-full"
-                      disabled={!content.trim() || isOptimizing || actionLoading}
-                    >
-                      <Brain className="w-4 h-4 mr-2" />
-                      {isOptimizing || actionLoading ? 'Optimizando...' : 'Mejorar con IA'}
-                    </Button>
-                  </motion.div>
-                </div>
-              )}
-
-              {(showScheduler || state === 'planificado') && (
-                <div className="space-y-4 bg-muted p-4 rounded-lg">
-                  <h3 className="font-medium">Programar publicación</h3>
-                  <div className="flex gap-4">
-                    <div className="flex-1 space-y-2">
-                      <label className="text-sm text-muted-foreground">Fecha</label>
-                      <div className="relative">
-                        <Input
-                          type="date"
-                          value={scheduledDate}
-                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setScheduledDate(e.target.value)}
-                          className="pl-8"
-                        />
-                        <Calendar className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      </div>
+              <TabsContent value="content" className="p-6 flex-1 overflow-y-auto">
+                <div className="space-y-6">
+                  {/* Mensajes de éxito o error */}
+                  {error && (
+                    <div className="text-sm text-red-500 bg-red-50 p-3 rounded-md border border-red-100 flex items-center ">
+                      <span className="mr-2">⚠️</span> {error}
                     </div>
-                    <div className="w-32 space-y-2">
-                      <label className="text-sm text-muted-foreground">Hora</label>
-                      <div className="relative">
-                        <select
-                          value={scheduledTime}
-                          onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setScheduledTime(e.target.value)}
-                          className="w-full pl-8 h-10 rounded-md border bg-background"
-                        >
-                          <option value="">Seleccionar</option>
-                          {Array.from({ length: 96 }, (_, i) => {
-                            const hour = Math.floor(i / 4);
-                            const minute = (i % 4) * 15;
-                            const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-                            return (
-                              <option key={time} value={time}>
-                                {time}
-                              </option>
-                            );
-                          })}
-                        </select>
-                        <Clock className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      </div>
+                  )}
+
+                  {successMessage && (
+                    <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md border border-green-100 flex items-center ">
+                      <span className="mr-2">✅</span> {successMessage}
                     </div>
-                  </div>
-                </div>
-              )}
+                  )}
 
-              {optimizationError && (
-                <div className="text-sm text-red-500 bg-red-50 p-2 rounded">
-                  {optimizationError}
-                </div>
-              )}
-
-              {optimizedContent && (
-                <OptimizationDialog
-                  originalContent={content}
-                  optimizedContent={optimizedContent}
-                  onAccept={handleAcceptOptimization}
-                  onDiscard={() => setOptimizedContent(null)}
-                />
-              )}
-            </TabsContent>
-
-            <TabsContent value="image" className="space-y-4">
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm text-muted-foreground">Descripción de la imagen</label>
-                  <Textarea
-                    value={imagePrompt}
-                    onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setImagePrompt(e.target.value)}
-                    placeholder="Describe la imagen que deseas generar..."
-                    className="mt-1"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-muted-foreground">Estilo</label>
-                  <Select value={selectedStyle} onValueChange={setSelectedStyle}>
-                    <SelectTrigger className="w-full mt-1">
-                      <SelectValue placeholder="Selecciona un estilo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {imageStyles.map((style) => (
-                        <SelectItem key={style.id} value={style.id}>
-                          <div className="flex items-center gap-3 py-1">
-                            <img
-                              src={style.preview}
-                              alt={style.name}
-                              className="w-12 h-12 rounded-md object-cover"
-                            />
-                            <span className="font-medium">{style.name}</span>
+                  {/* Comparación de contenido original vs optimizado */}
+                  {showComparison && optimizedContent && (
+                    <div className="mb-6 border rounded-lg overflow-hidden shadow-sm">
+                      <div className="bg-gray-50 px-4 py-3 border-b">
+                        <h3 className="font-medium text-gray-700 flex items-center ">
+                          <Sparkles className="w-4 h-4 mr-2 text-purple-500" />
+                          Contenido optimizado con IA
+                        </h3>
+                        <p className="text-xs text-gray-500 mt-1 ">Revisa el contenido optimizado y decide si deseas aplicar los cambios.</p>
+                      </div>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                        <div className="flex flex-col h-full">
+                          <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center ">
+                            <span className="mr-1">📝</span> Original
+                          </h4>
+                          <div className="p-3 bg-gray-50 rounded-md whitespace-pre-wrap border border-gray-100 text-gray-700 text-sm h-[250px] overflow-y-auto flex-grow  leading-relaxed">
+                            {originalContent || content}
                           </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <Button
-                  onClick={handleGenerateImage}
-                  disabled={!imagePrompt.trim()}
-                  className="w-full"
-                >
-                  <ImageIcon className="w-4 h-4 mr-2" />
-                  Generar Imagen
-                </Button>
-
-                {generatedImages.length > 0 && (
-                  <div className="grid grid-cols-2 gap-4">
-                    {generatedImages.map((image) => (
-                      <div key={image.id} className="relative group">
-                        <img
-                          src={image.url}
-                          alt={image.prompt}
-                          className="w-full h-40 object-cover rounded-lg"
-                        />
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <Button variant="secondary" size="sm">
-                            Seleccionar
-                          </Button>
+                        </div>
+                        
+                        <div className="flex flex-col h-full">
+                          <h4 className="text-xs font-medium text-gray-500 mb-2 flex items-center ">
+                            <span className="mr-1">✨</span> Optimizado
+                          </h4>
+                          <div className="p-3 bg-white rounded-md whitespace-pre-wrap border border-purple-100 text-gray-800 text-sm h-[250px] overflow-y-auto flex-grow  leading-relaxed">
+                            {optimizedContent}
+                          </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-          </Tabs>
+                      
+                      <div className="flex justify-end gap-2 p-3 bg-gray-50 border-t">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={handleDiscardOptimization} 
+                          className="text-gray-600 "
+                        >
+                          Descartar
+                        </Button>
+                        <Button 
+                          size="sm"
+                          onClick={handleAcceptOptimization} 
+                          className="bg-blue-600 hover:bg-blue-700 "
+                        >
+                          Aplicar cambios
+                        </Button>
+                      </div>
+                    </div>
+                  )}
 
-          <div className="flex justify-between pt-4 border-t">
-            <Button variant="outline" onClick={onClose}>
-              Cancelar
-            </Button>
-            <div className="flex gap-2">
-              {!showScheduler && (
-                <>
-                  <Button variant="outline" onClick={handleSchedule}>
-                    <Calendar className="w-4 h-4 mr-2" />
-                    Planificar
-                  </Button>
+                  {/* Área de texto principal - más grande y prominente */}
+                  {!showComparison && (
+                    <>
+                      <div className="relative">
+                        <Textarea
+                          value={content}
+                          onChange={(e) => setContent(e.target.value)}
+                          placeholder="Escribe tu publicación aquí..."
+                          className="min-h-[250px] text-base p-4 border-gray-200 focus:border-blue-300 focus:ring-1 focus:ring-blue-300 transition-all resize-none leading-relaxed"
+                        />
+                      </div>
+
+                      {/* Sección de estado y programación - más sutil */}
+                      <div className="flex flex-col sm:flex-row gap-4 items-start">
+                        <div className="w-full sm:w-1/3">
+                          <label className="text-xs font-medium text-gray-500 mb-1 block">Estado</label>
+                          <Select
+                            value={state}
+                            onValueChange={(value) => setState(value as PostState)}
+                          >
+                            <SelectTrigger className="w-full border-gray-200">
+                              <SelectValue placeholder="Estado" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="borrador" className="">Borrador</SelectItem>
+                              <SelectItem value="listo" className="">Listo</SelectItem>
+                              <SelectItem value="planificado" className="">Planificado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div className="w-full sm:w-2/3 flex gap-3">
+                          <div className="flex-1">
+                            <label className="text-xs font-medium text-gray-500 mb-1 block">Fecha</label>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="outline"
+                                  className={cn(
+                                    "w-full justify-start text-left font-normal border-gray-200",
+                                    !scheduledDate && "text-gray-400"
+                                  )}
+                                >
+                                  <CalendarIcon className="mr-2 h-4 w-4 text-gray-400" />
+                                  {scheduledDate ? format(new Date(scheduledDate), "PPP", { locale: es }) : "Seleccionar fecha"}
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-auto p-0" align="start">
+                                <div className="calendar-with-indicators">
+                                  <Calendar
+                                    mode="single"
+                                    selected={scheduledDate ? new Date(scheduledDate) : undefined}
+                                    onSelect={(date) => date && setScheduledDate(format(date, 'yyyy-MM-dd'))}
+                                    initialFocus
+                                    locale={es}
+                                    modifiers={{
+                                      hasScheduledPosts: (date) => hasScheduledPostsOnDate(date)
+                                    }}
+                                    modifiersClassNames={{
+                                      hasScheduledPosts: "bg-blue-50 relative after:content-[''] after:absolute after:bottom-1 after:left-1/2 after:-translate-x-1/2 after:w-1 after:h-1 after:bg-blue-500 after:rounded-full"
+                                    }}
+                                    className="p-0"
+                                  />
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </div>
+                          
+                          <div className="w-32">
+                            <label className="text-xs font-medium text-gray-500 mb-1 block">Hora</label>
+                            <div className="relative">
+                              <select
+                                value={scheduledTime}
+                                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setScheduledTime(e.target.value)}
+                                className="w-full pl-8 h-10 rounded-md border border-gray-200 bg-background"
+                              >
+                                <option value="" className="">Sin hora</option>
+                                {Array.from({ length: 96 }, (_, i) => {
+                                  const hour = Math.floor(i / 4);
+                                  const minute = (i % 4) * 15;
+                                  const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+                                  return (
+                                    <option key={time} value={time} className="">
+                                      {time}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                              <Clock className="absolute left-2 top-2.5 h-4 w-4 text-gray-400 pointer-events-none" />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botón de IA - más sutil pero atractivo */}
+                      <Button
+                        onClick={handleOptimizeWithAI}
+                        className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white transition-all "
+                        disabled={!content.trim() || isOptimizing || actionLoading}
+                      >
+                        {isOptimizing || actionLoading ? (
+                          <div className="flex items-center">
+                            <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                            <span className="">Optimizando...</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center">
+                            <Sparkles className="w-4 h-4 mr-2" />
+                            <span className="">Mejorar con IA</span>
+                          </div>
+                        )}
+                      </Button>
+
+                      {optimizationError && (
+                        <div className="text-sm text-red-500 bg-red-50 p-3 rounded-md border border-red-100 flex items-center ">
+                          <span className="mr-2">⚠️</span> {optimizationError}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="image" className="p-6 flex-1 overflow-y-auto">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">Descripción de la imagen</label>
+                    <Textarea
+                      value={imagePrompt}
+                      onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setImagePrompt(e.target.value)}
+                      placeholder="Describe la imagen que deseas generar..."
+                      className="mt-1 border-gray-200"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">Estilo</label>
+                    <Select value={selectedStyle} onValueChange={setSelectedStyle}>
+                      <SelectTrigger className="w-full mt-1 border-gray-200">
+                        <SelectValue placeholder="Selecciona un estilo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {imageStyles.map((style) => (
+                          <SelectItem key={style.id} value={style.id}>
+                            <div className="flex items-center gap-3 py-1">
+                              <img
+                                src={style.preview}
+                                alt={style.name}
+                                className="w-12 h-12 rounded-md object-cover"
+                              />
+                              <span className="font-medium">{style.name}</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <Button
-                    variant="outline"
-                    onClick={handleShareToLinkedIn}
-                    disabled={!content.trim()}
+                    onClick={handleGenerateImage}
+                    disabled={!imagePrompt.trim()}
+                    className="w-full bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white"
                   >
-                    <Share2 className="w-4 h-4 mr-2" />
-                    Publicar en LinkedIn
+                    <ImageIcon className="w-4 h-4 mr-2" />
+                    Generar Imagen
                   </Button>
-                </>
-              )}
+
+                  {generatedImages.length > 0 && (
+                    <div className="grid grid-cols-2 gap-4 mt-6">
+                      {generatedImages.map((image) => (
+                        <div key={image.id} className="relative group overflow-hidden rounded-lg">
+                          <img
+                            src={image.url}
+                            alt={image.prompt}
+                            className="w-full h-40 object-cover transition-transform group-hover:scale-105"
+                          />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <Button variant="secondary" size="sm" className="bg-white/90 hover:bg-white">
+                              Seleccionar
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+            </Tabs>
+
+            {/* Footer con botones */}
+            <div className="border-t p-4 flex justify-between items-center bg-gray-50">
+              <Button variant="ghost" onClick={onClose} className="text-gray-600">
+                Cancelar
+              </Button>
               <Button
-                onClick={showScheduler ? handleSaveSchedule : handleSave}
+                onClick={handleSave}
                 disabled={isSaving || !content.trim()}
+                className="bg-blue-600 hover:bg-blue-700"
               >
-                {isSaving ? 'Guardando...' : (showScheduler ? 'Guardar y Programar' : 'Guardar')}
+                {isSaving ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin mr-2 h-4 w-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    Guardando...
+                  </div>
+                ) : 'Guardar'}
               </Button>
             </div>
           </div>
@@ -638,22 +781,24 @@ Proporciona el post mejorado en formato texto, listo para ser publicado en Linke
 
       {/* Diálogo de confirmación para guardar cambios */}
       <Dialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[400px] bg-white shadow-lg">
           <DialogHeader>
-            <DialogTitle>Guardar cambios</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-lg font-medium text-gray-800 ">Guardar cambios</DialogTitle>
+            <DialogDescription className="text-sm text-gray-500 ">
               Has realizado cambios en esta publicación. ¿Quieres guardarlos antes de cerrar?
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="flex justify-end gap-2">
+          <DialogFooter className="flex justify-end gap-2 mt-4">
             <Button
               variant="outline"
               onClick={() => handleConfirmClose(false)}
+              className=""
             >
               Descartar
             </Button>
             <Button
               onClick={() => handleConfirmClose(true)}
+              className="bg-blue-600 hover:bg-blue-700 "
             >
               Guardar
             </Button>

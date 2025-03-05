@@ -8,11 +8,13 @@ import Calendar from './Calendar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Button } from '../ui/button';
 import { Plus } from 'lucide-react';
+import { format } from 'date-fns';
 
 export default function PlannerView() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<string>('');
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -37,16 +39,25 @@ export default function PlannerView() {
 
   const handleCreatePost = () => {
     setSelectedPost(null);
+    setSelectedDate('');
     setIsEditorOpen(true);
   };
 
   const handleEditorClose = () => {
     setSelectedPost(null);
+    setSelectedDate('');
     setIsEditorOpen(false);
   };
 
   const handlePostSelect = (post: Post) => {
     setSelectedPost(post);
+    setSelectedDate('');
+    setIsEditorOpen(true);
+  };
+
+  const handleDateSelect = (date: Date) => {
+    setSelectedPost(null);
+    setSelectedDate(format(date, 'yyyy-MM-dd'));
     setIsEditorOpen(true);
   };
 
@@ -90,6 +101,7 @@ export default function PlannerView() {
               <Calendar 
                 posts={posts.filter(p => p.state === 'planificado')}
                 onPostSelect={handlePostSelect}
+                onDateSelect={handleDateSelect}
               />
             } />
           </Routes>
@@ -99,11 +111,13 @@ export default function PlannerView() {
       {isEditorOpen && (
         <PostEditor
           post={selectedPost}
+          initialDate={selectedDate}
           onClose={handleEditorClose}
           onSave={() => {
             loadPosts();
             handleEditorClose();
           }}
+          allPosts={posts}
         />
       )}
     </div>
