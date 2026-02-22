@@ -7,8 +7,7 @@ import {
   useLocation,
   useNavigate
 } from 'react-router-dom';
-import { supabase } from './lib/supabase';
-import { Session } from '@supabase/supabase-js';
+import { AuthSession } from './types/auth';
 import { useAuth } from './hooks/useAuth';
 import { checkExtensionSync } from './lib/extensionCommunication';
 
@@ -25,7 +24,7 @@ import { ThemeProvider } from './lib/theme';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  session: Session | null;
+  session: AuthSession | null;
 }
 
 const ProtectedRoute = ({ children, session }: ProtectedRouteProps) => {

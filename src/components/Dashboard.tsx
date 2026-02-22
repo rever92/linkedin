@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow
 } from "@/components/ui/table";
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import Papa from 'papaparse';
 import { LinkedInPost, DashboardStats } from '../types';
 import PostsTable from './PostsTable';
@@ -407,9 +407,6 @@ export default function Dashboard({ data }: DashboardProps) {
   const BATCH_SIZE = 30; // Tamaño del lote
 
   const handleFileUpload = async (file: File) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('No authenticated user found');
-
     setLoading(true);
     setUpdateMessage(null);
 
@@ -419,7 +416,6 @@ export default function Dashboard({ data }: DashboardProps) {
           try {
             const posts = results.data.slice(1).map((row: any) => {
               if (row.length === 0 || !row[0]) {
-                console.error('Fila vacía encontrada:', row);
                 return null;
               }
 
@@ -436,11 +432,9 @@ export default function Dashboard({ data }: DashboardProps) {
                 if (day && month && year && timePart) {
                   isoDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${timePart}`;
                 } else {
-                  console.error('Formato de fecha incorrecto en la fila:', row);
                   throw new Error('No se pudo extraer la fecha del post');
                 }
               } else {
-                console.error('No se encontró ID de post ni fecha en la fila:', row);
                 throw new Error('No se pudo extraer la fecha del post');
               }
 
@@ -453,46 +447,20 @@ export default function Dashboard({ data }: DashboardProps) {
                 comments: parseInt(row[5]) || 0,
                 shares: parseInt(row[6]) || 0,
                 post_type: row[7],
-                user_id: user.id
               };
-            }).filter(post => post !== null);
+            }).filter((post: any) => post !== null);
 
-            const totalBatches = Math.ceil(posts.length / BATCH_SIZE); // Calcular el total de lotes
-            let processedBatches = 0; // Contador de lotes procesados
+            const totalBatches = Math.ceil(posts.length / BATCH_SIZE);
+            let processedBatches = 0;
 
             for (let i = 0; i < totalBatches; i++) {
-              const batch = posts.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE); // Obtener el lote actual
-
-              const { error: upsertError } = await supabase
-                .from('linkedin_posts')
-                .upsert(batch.map(post => ({
-                  url: post.url,
-                  date: post.date,
-                  text: post.text,
-                  views: post.views,
-                  likes: post.likes,
-                  comments: post.comments,
-                  shares: post.shares,
-                  post_type: post.post_type,
-                  user_id: user.id
-                })), {
-                  onConflict: 'url',
-                  ignoreDuplicates: false
-                });
-
-              if (upsertError) throw upsertError;
-
-              processedBatches++; // Incrementar el contador de lotes procesados
-              setUpdateMessage(`Procesando lote ${processedBatches} de ${totalBatches}`); // Actualizar el mensaje de progreso
+              const batch = posts.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);
+              await api.upsertPosts(batch);
+              processedBatches++;
+              setUpdateMessage(`Procesando lote ${processedBatches} de ${totalBatches}`);
             }
 
-            const { data: updatedPosts, error: loadError } = await supabase
-              .from('linkedin_posts')
-              .select('*')
-              .order('date', { ascending: false });
-
-            if (loadError) throw loadError;
-
+            const updatedPosts = await api.getPosts();
             resolve(updatedPosts);
             setUpdateMessage('Datos actualizados correctamente.');
           } catch (err: any) {

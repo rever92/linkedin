@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Star, LineChart, LogOut, Calendar, Crown, Rocket, User2 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import ThemeToggle from './ThemeToggle';
 import { useUserRole } from '../hooks/useUserRole';
-import { usePremiumActions } from '../hooks/usePremiumActions';
 import { useNavigate } from 'react-router-dom';
 
 interface SidebarProps {
@@ -41,35 +40,19 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPath }) => {
   useEffect(() => {
     const loadUsageStats = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = api.getUser();
         if (!user) return;
 
         // Obtener los límites del plan actual
-        const { data: roleLimits, error: limitsError } = await supabase
-          .from('premium_limits')
-          .select('action_type, limit_type, limit_value')
-          .eq('role', role.toUpperCase())
-          .eq('limit_type', 'monthly_limit');
-
-        if (limitsError) {
-          console.error('Error al cargar límites:', limitsError);
-          return;
-        }
+        const limits = await api.getPremiumLimits();
 
         // Obtener el uso actual del usuario
-        const { data: monthlyActions, error: actionsError } = await supabase.rpc('get_monthly_actions', {
-          p_user_id: user.id
-        });
+        const monthlyActions = await api.getPremiumUsage();
 
-        if (actionsError) {
-          console.error('Error al cargar acciones:', actionsError);
-          return;
-        }
+        if (limits && monthlyActions) {
+          const profileLimit = limits.profile_analysis?.monthly_limit || 0;
+          const postLimit = limits.post_optimization?.monthly_limit || 0;
 
-        if (roleLimits && monthlyActions) {
-          const profileLimit = roleLimits.find(l => l.action_type === 'profile_analysis')?.limit_value || 0;
-          const postLimit = roleLimits.find(l => l.action_type === 'post_optimization')?.limit_value || 0;
-          
           const profileUsed = monthlyActions.find((a: any) => a.action_type === 'profile_analysis')?.count || 0;
           const postUsed = monthlyActions.find((a: any) => a.action_type === 'post_optimization')?.count || 0;
 
@@ -94,27 +77,6 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPath }) => {
 
     if (role) {
       loadUsageStats();
-
-      // Suscribirse a cambios en las acciones premium
-      const channel = supabase.channel('premium_actions_changes')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'premium_actions',
-            filter: `user_id=eq.${supabase.auth.getUser().then(({ data }) => data.user?.id)}`
-          },
-          () => {
-            // Recargar estadísticas cuando haya cambios
-            loadUsageStats();
-          }
-        )
-        .subscribe();
-
-      return () => {
-        channel.unsubscribe();
-      };
     }
   }, [role]);
 
@@ -163,7 +125,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPath }) => {
 
   const handleSignOut = async () => {
     try {
-      await supabase.auth.signOut();
+      await api.logout();
       navigate('/');
     } catch (error) {
       console.error('Error al cerrar sesión:', error);

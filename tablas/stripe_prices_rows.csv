@@ -1,0 +1,5 @@
+id,stripe_price_id,stripe_product_id,active,currency,interval,interval_count,unit_amount,created_at,updated_at
+3ae7b138-03cb-43b7-a427-2366a38cdf6b,price_1QakiwAo452W2cfXfMzwuTFw,prod_RTi98cnP42rnkc,true,eur,month,1,499,2024-12-27 22:08:29.323691+00,2024-12-27 23:14:55.323444+00
+5f0e6821-dede-48b8-bc91-53400eb58d44,price_1QaluLAo452W2cfXahBPv9e0,prod_RTjNt59qRzUQC2,false,eur,month,1,499,2024-12-27 22:23:15.76237+00,2024-12-27 23:14:55.323444+00
+94546ac5-ecd1-4062-a557-28d3831ded11,price_1QakicAo452W2cfXroAYro1j,prod_RTi8qRvpW8dlnV,true,eur,month,1,1499,2024-12-27 22:08:29.323691+00,2024-12-27 23:14:55.323444+00
+e5f455b6-5079-457d-96f9-a255fefb9c07,price_1QaluZAo452W2cfXGHJVfOyI,prod_RTjNXN9DP2i1SF,false,eur,month,1,1499,2024-12-27 22:23:15.76237+00,2024-12-27 23:14:55.323444+00

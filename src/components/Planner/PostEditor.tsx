@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Post, PostState, AIGeneratedImage } from '../../types/posts';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import {
   Dialog,
   DialogContent,
@@ -126,28 +126,16 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
         scheduled_datetime: state === 'planificado' && scheduledDate
           ? new Date(`${scheduledDate}T${finalScheduledTime || '00:00'}`).toISOString()
           : null,
-        user_id: (await supabase.auth.getUser()).data.user?.id
       };
 
       if (currentPostId) {
         // Actualizar post existente
-        const { error } = await supabase
-          .from('posts')
-          .update(postData)
-          .eq('id', currentPostId);
-
-        if (error) throw error;
+        await api.updatePlannerPost(currentPostId, postData);
       } else {
         // Crear nuevo post
-        const { data: newPost, error } = await supabase
-          .from('posts')
-          .insert([postData])
-          .select()
-          .single();
-
-        if (error) throw error;
+        const newPost = await api.createPlannerPost(postData);
         if (newPost) {
-          setCurrentPostId(newPost.id);
+          setCurrentPostId(newPost._id || newPost.id);
           setIsNewPostCreated(true);
         }
       }
@@ -185,13 +173,12 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
       // Guardar el contenido original antes de optimizar
       setOriginalContent(content);
 
-      const { data: { user }, error: userError } = await supabase.auth.getUser();
-      if (userError) throw userError;
+      const user = api.getUser();
       if (!user) throw new Error('Usuario no autenticado');
 
       // Si el post no existe, guardarlo primero como borrador temporal
       let postId = currentPostId;
-      
+
       if (!postId) {
         try {
           console.log('💾 Guardando borrador temporal antes de optimizar...');
@@ -201,23 +188,16 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
             scheduled_datetime: state === 'planificado' && scheduledDate && scheduledTime
               ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
               : null,
-            user_id: user.id
           };
 
-          const { data: newPost, error: saveError } = await supabase
-            .from('posts')
-            .insert([postData])
-            .select()
-            .single();
-
-          if (saveError) throw saveError;
+          const newPost = await api.createPlannerPost(postData);
           if (!newPost) throw new Error('Error al guardar el post');
 
-          postId = newPost.id;
+          postId = newPost._id || newPost.id;
           setCurrentPostId(postId); // Actualizar el estado con el nuevo ID
           setIsNewPostCreated(true);
           console.log('📝 Borrador temporal guardado con ID:', postId);
-          
+
           // Mostrar mensaje informativo
           setSuccessMessage("Se ha guardado un borrador temporal para optimizar");
           setTimeout(() => setSuccessMessage(null), 3000);
@@ -227,7 +207,7 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
         }
       } else {
         console.log('🔄 Optimizando post existente con ID:', postId);
-        
+
         // Si hay cambios pendientes, actualizar el post antes de optimizarlo
         if (hasChanges()) {
           console.log('📝 Actualizando post existente antes de optimizar...');
@@ -237,19 +217,9 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
             scheduled_datetime: state === 'planificado' && scheduledDate && scheduledTime
               ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
               : null,
-            user_id: user.id
           };
-          
-          const { error: updateError } = await supabase
-            .from('posts')
-            .update(postData)
-            .eq('id', postId);
-            
-          if (updateError) {
-            console.error('❌ Error al actualizar el post:', updateError);
-            throw updateError;
-          }
-          
+
+          await api.updatePlannerPost(postId, postData);
           console.log('✅ Post actualizado antes de optimizar');
         }
       }
@@ -267,28 +237,15 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
       console.log('✨ Acción premium registrada');
 
       // Obtener recomendaciones y posts
-      const { data: recentRecommendation, error: recError } = await supabase
-        .from('recommendations')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('date_generated', { ascending: false })
-        .limit(1)
-        .single();
+      const recentRecommendation = await api.getLatestRecommendation().catch(() => null);
 
-      if (recError && recError.code !== 'PGRST116') throw recError;
-
+      const allLinkedInPosts = await api.getPosts();
       const oneYearAgo = new Date();
       oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-
-      const { data: topPosts, error: postsError } = await supabase
-        .from('linkedin_posts')
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('date', oneYearAgo.toISOString())
-        .order('views', { ascending: false })
-        .limit(10);
-
-      if (postsError) throw postsError;
+      const topPosts = allLinkedInPosts
+        .filter((p: any) => new Date(p.date) >= oneYearAgo)
+        .sort((a: any, b: any) => (b.views || 0) - (a.views || 0))
+        .slice(0, 10);
 
       // Generar el prompt
       const prompt = `Eres un experto en comunicación digital y marketing de contenidos con amplia experiencia en LinkedIn. Tu tarea es optimizar un post de un usuario manteniendo su tono personal y auténtico mientras incorporas las mejores prácticas de engagement.
@@ -364,31 +321,20 @@ Proporciona el post mejorado en formato texto, listo para ser publicado en Linke
       }
 
       // Guardar la optimización en la tabla de historial
-      const { error: optimizationError } = await supabase
-        .from('post_optimizations')
-        .insert([{
-          post_id: postId,
-          user_id: (await supabase.auth.getUser()).data.user?.id,
-          original_content: originalContent || content,
-          optimized_content: optimizedContent
-        }]);
-
-      if (optimizationError) throw optimizationError;
+      await api.savePlannerOptimization(postId, {
+        original_content: originalContent || content,
+        optimized_content: optimizedContent
+      });
 
       // Actualizar el contenido en el estado local
       setContent(optimizedContent);
-      
-      // Actualizar el post con el nuevo contenido
-      const { error: updateError } = await supabase
-        .from('posts')
-        .update({ 
-          content: optimizedContent,
-          // Si es un post nuevo creado como borrador, mantener el estado que el usuario haya seleccionado
-          state: state
-        })
-        .eq('id', postId);
 
-      if (updateError) throw updateError;
+      // Actualizar el post con el nuevo contenido
+      await api.updatePlannerPost(postId, {
+        content: optimizedContent,
+        // Si es un post nuevo creado como borrador, mantener el estado que el usuario haya seleccionado
+        state: state
+      });
       
       // Cerrar la comparación
       setShowComparison(false);

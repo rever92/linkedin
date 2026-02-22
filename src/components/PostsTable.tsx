@@ -2,8 +2,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { LinkedInPost } from '../types';
 import { ChevronUp, ChevronDown, Search, ExternalLink, X } from 'lucide-react';
-import { supabase } from '../lib/supabase';
-import { Session } from '@supabase/supabase-js';
+import { api } from '../lib/api';
 import { usePremiumActions } from '../hooks/usePremiumActions';
 
 interface PostsTableProps {
@@ -18,7 +17,7 @@ export default function PostsTable({ data }: PostsTableProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
   const [postsPerPage, setPostsPerPage] = useState(10);
-  const [session, setSession] = useState<Session | null>(null);
+  const [hasSession, setHasSession] = useState(false);
   const [canSubmit, setCanSubmit] = useState(true);
   const [lastSubmissionTime, setLastSubmissionTime] = useState<Date | null>(null);
   const [waitTime, setWaitTime] = useState<number>(0);
@@ -27,25 +26,11 @@ export default function PostsTable({ data }: PostsTableProps) {
   const [selectedPost, setSelectedPost] = useState<LinkedInPost | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) {
-        checkSubmissionLimit();
-      }
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
-        checkSubmissionLimit();
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    const session = api.getStoredSession();
+    setHasSession(!!session);
+    if (session) {
+      checkSubmissionLimit();
+    }
   }, []);
 
   useEffect(() => {
@@ -54,7 +39,7 @@ export default function PostsTable({ data }: PostsTableProps) {
   }, [data]);
 
   const checkSubmissionLimit = async () => {
-    if (!session) return;
+    if (!hasSession) return;
 
     try {
       const canProcess = await checkBatchAnalysisLimit();
@@ -66,7 +51,7 @@ export default function PostsTable({ data }: PostsTableProps) {
   };
 
   const handleSubmitBatch = async () => {
-    if (!session) {
+    if (!hasSession) {
       alert('No hay sesión activa. Por favor, inicia sesión.');
       return;
     }
@@ -205,15 +190,11 @@ export default function PostsTable({ data }: PostsTableProps) {
           console.log('Actualizando categorías en la base de datos...');
           for (const categoryInfo of categoriesData) {
             console.log(`Actualizando post con URL: ${categoryInfo.url}, Categoría: ${categoryInfo.category}`);
-            const { error } = await supabase
-              .from('linkedin_posts')
-              .update({ category: categoryInfo.category })
-              .eq('url', categoryInfo.url);
-            
-            if (error) {
-              console.error(`Error actualizando post:`, error);
-            } else {
+            try {
+              await api.updatePostCategory(categoryInfo.url, categoryInfo.category);
               console.log(`Post actualizado correctamente`);
+            } catch (err) {
+              console.error(`Error actualizando post:`, err);
             }
           }
 

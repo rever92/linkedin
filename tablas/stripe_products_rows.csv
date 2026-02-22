@@ -1,0 +1,5 @@
+id,stripe_product_id,name,description,active,metadata,created_at,updated_at
+10ab9b39-3a3d-445b-9d93-d21afa061111,prod_RTjNt59qRzUQC2,Premium,Plan Premium con funcionalidades avanzadas,false,"{""role"":""PREMIUM""}",2024-12-27 22:23:15.76237+00,2024-12-27 23:14:55.323444+00
+215bd605-a17a-4b56-b1a7-91c517da8e0d,prod_RTi8qRvpW8dlnV,Pro,Plan Pro con todas las funcionalidades,true,"{""role"":""PRO""}",2024-12-27 22:08:29.323691+00,2024-12-27 23:14:55.323444+00
+923336a2-9cc7-4ba2-8c13-8ca152831ac5,prod_RTi98cnP42rnkc,Premium,Plan Premium con funcionalidades avanzadas,true,"{""role"":""PREMIUM""}",2024-12-27 22:08:29.323691+00,2024-12-27 23:14:55.323444+00
+a4d6e198-a737-4ea8-b03b-e6a76ac5ac25,prod_RTjNXN9DP2i1SF,Pro,Plan Pro con todas las funcionalidades,false,"{""role"":""PRO""}",2024-12-27 22:23:15.76237+00,2024-12-27 23:14:55.323444+00

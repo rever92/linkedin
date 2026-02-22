@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
-import { Session } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { api } from '../lib/api';
+import { AuthSession } from '../types/auth';
 
 export interface AuthState {
-  session: Session | null;
+  session: AuthSession | null;
   isLoading: boolean;
   error: Error | null;
 }
@@ -15,43 +15,40 @@ export const useAuth = () => {
     isLoading: true,
     error: null,
   });
-  
+
   const navigate = useNavigate();
-  const location = useLocation();
+
+  const updateSession = useCallback((session: AuthSession | null) => {
+    setState(prev => ({
+      ...prev,
+      session,
+      isLoading: false,
+    }));
+  }, []);
 
   useEffect(() => {
     let mounted = true;
 
     const initialize = async () => {
       try {
-        // Intentar recuperar la sesión almacenada
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (mounted) {
-          if (error) throw error;
-          
-          setState(prev => ({
-            ...prev,
-            session,
-            isLoading: false,
-          }));
+        // Try to get stored session
+        const stored = api.getStoredSession();
 
-          // Si hay una sesión, verificar y refrescar el token si es necesario
-          if (session) {
-            const { data: { session: refreshedSession }, error: refreshError } = 
-              await supabase.auth.refreshSession();
-            
-            if (refreshError) {
-              console.error('Error al refrescar la sesión:', refreshError);
-              // Si hay un error al refrescar, intentamos cerrar sesión y redirigir
-              await supabase.auth.signOut();
-              navigate('/login');
-            } else if (refreshedSession && mounted) {
-              setState(prev => ({
-                ...prev,
-                session: refreshedSession,
-              }));
-            }
+        if (!stored) {
+          if (mounted) {
+            setState(prev => ({ ...prev, isLoading: false }));
+          }
+          return;
+        }
+
+        // Refresh the token to verify it's still valid
+        const refreshed = await api.refresh();
+        if (mounted) {
+          if (refreshed) {
+            updateSession(refreshed);
+          } else {
+            // Session expired
+            updateSession(null);
           }
         }
       } catch (error) {
@@ -68,69 +65,30 @@ export const useAuth = () => {
 
     initialize();
 
-    // Suscribirse a cambios en la autenticación
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, newSession) => {
-        if (mounted) {
-          console.log('Cambio en el estado de autenticación:', event);
-          
-          if (event === 'SIGNED_OUT') {
-            // Limpiar el estado local
-            setState(prev => ({
-              ...prev,
-              session: null,
-              isLoading: false,
-            }));
-            // Redirigir al login
-            navigate('/login');
-          } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            setState(prev => ({
-              ...prev,
-              session: newSession,
-              isLoading: false,
-            }));
-          }
-        }
-      }
-    );
-
-    // Configurar un intervalo para refrescar el token periódicamente
+    // Refresh token periodically (every 10 minutes)
     const refreshInterval = setInterval(async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const session = api.getStoredSession();
       if (session) {
-        const { data: { session: refreshedSession }, error: refreshError } = 
-          await supabase.auth.refreshSession();
-        
-        if (!refreshError && refreshedSession && mounted) {
-          setState(prev => ({
-            ...prev,
-            session: refreshedSession,
-          }));
+        const refreshed = await api.refresh();
+        if (refreshed && mounted) {
+          updateSession(refreshed);
         }
       }
-    }, 10 * 60 * 1000); // Refrescar cada 10 minutos
+    }, 10 * 60 * 1000);
 
     return () => {
       mounted = false;
-      subscription.unsubscribe();
       clearInterval(refreshInterval);
     };
-  }, [navigate]);
+  }, [updateSession]);
 
   const signOut = async () => {
     try {
-      setState(prev => ({ ...prev, isLoading: true }));
-      await supabase.auth.signOut();
-      navigate('/', { replace: true });
+      await api.logout();
     } catch (error) {
       console.error('Error al cerrar sesión:', error);
-      setState(prev => ({
-        ...prev,
-        error: error as Error,
-      }));
-    } finally {
-      setState(prev => ({ ...prev, isLoading: false }));
     }
+    window.location.href = '/';
   };
 
   return {
@@ -138,4 +96,4 @@ export const useAuth = () => {
     signOut,
     isAuthenticated: !!state.session,
   };
-}; 
+};

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { Post } from '../../types/posts';
 import PostList from './PostList';
 import PostEditor from './PostEditor';
@@ -23,18 +23,12 @@ export default function PlannerView() {
   }, []);
 
   const loadPosts = async () => {
-    const { data, error } = await supabase
-      .from('posts')
-      .select('*')
-      .neq('state', 'eliminado')
-      .order('created_at', { ascending: false });
-
-    if (error) {
+    try {
+      const data = await api.getPlannerPosts();
+      setPosts(data || []);
+    } catch (error) {
       console.error('Error cargando posts:', error);
-      return;
     }
-
-    setPosts(data || []);
   };
 
   const handleCreatePost = () => {

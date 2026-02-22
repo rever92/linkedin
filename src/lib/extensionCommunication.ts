@@ -1,4 +1,4 @@
-import { Session } from '@supabase/supabase-js';
+import { AuthSession } from '../types/auth';
 
 // Declaración de tipos para chrome
 declare global {
@@ -13,8 +13,7 @@ declare global {
 }
 
 // Reemplaza esto con el ID que copiaste de chrome://extensions/
-const EXTENSION_ID = 'akfigmhfdpiimkoahgglfdkadgiinhno'; 
-// const EXTENSION_ID = 'beicaapgmnneiipgjekoapgjehjdajjn';
+const EXTENSION_ID = 'beicaapgmnneiipgjekoapgjehjdajjn';
 
 let sessionSent = false;
 
@@ -31,7 +30,7 @@ const checkExtensionAvailability = () => {
   return details.chromeExists && details.runtimeExists && details.sendMessageExists;
 };
 
-export const sendAuthToExtension = async (session: Session | null) => {
+export const sendAuthToExtension = async (session: AuthSession | null) => {
   if (!session) {
     console.log('📝 [Extension] No hay sesión para enviar');
     return;
@@ -51,7 +50,7 @@ export const sendAuthToExtension = async (session: Session | null) => {
       hasUser: !!session.user,
       userId: session.user?.id
     });
-    
+
     const response = await chrome.runtime.sendMessage(
       EXTENSION_ID,
       {
@@ -77,20 +76,20 @@ export const sendAuthToExtension = async (session: Session | null) => {
       stack: error instanceof Error ? error.stack : undefined,
       extensionId: EXTENSION_ID
     };
-    
+
     console.log('❌ [Extension] Error al enviar datos:', errorDetails);
     sessionSent = false;
   }
 };
 
-export const checkExtensionSync = async (session: Session | null) => {
+export const checkExtensionSync = async (session: AuthSession | null) => {
   if (!session) {
     console.log('📝 [Extension] No hay sesión para verificar');
     return;
   }
 
   console.log('📝 [Extension] Iniciando verificación de sincronización...');
-  
+
   // Verificar disponibilidad antes de intentar sincronizar
   if (!checkExtensionAvailability()) {
     console.log('❌ [Extension] No se puede verificar sincronización: API de Chrome no disponible');
@@ -99,7 +98,7 @@ export const checkExtensionSync = async (session: Session | null) => {
 
   try {
     console.log('📝 [Extension] Enviando solicitud de verificación...');
-    
+
     const response = await chrome.runtime.sendMessage(
       EXTENSION_ID,
       { type: 'CHECK_SYNC' }
@@ -127,7 +126,7 @@ export const checkExtensionSync = async (session: Session | null) => {
       extensionId: EXTENSION_ID,
       timestamp: new Date().toISOString()
     };
-    
+
     console.log('❌ [Extension] Error al verificar sincronización:', errorDetails);
     sessionSent = false;
   }

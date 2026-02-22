@@ -1,0 +1,15 @@
+id,role,action_type,limit_type,limit_value,created_at,updated_at
+10,FREE,profile_analysis,days_between_analysis,0,2024-12-27 12:13:48.347732+00,2024-12-27 12:13:48.347732+00
+11,FREE,post_optimization,max_per_post,0,2024-12-27 12:13:48.347732+00,2024-12-27 12:13:48.347732+00
+12,FREE,post_optimization,monthly_limit,1,2024-12-27 12:13:48.347732+00,2024-12-27 12:13:48.347732+00
+13,PREMIUM,profile_analysis,days_between_analysis,1,2024-12-27 12:13:48.347732+00,2024-12-27 12:13:48.347732+00
+14,PREMIUM,profile_analysis,monthly_limit,3,2024-12-27 12:13:48.347732+00,2024-12-27 12:13:48.347732+00
+15,PREMIUM,post_optimization,max_per_post,2,2024-12-27 12:13:48.347732+00,2024-12-27 12:13:48.347732+00
+16,PREMIUM,post_optimization,monthly_limit,8,2024-12-27 12:13:48.347732+00,2024-12-27 12:13:48.347732+00
+17,PRO,profile_analysis,days_between_analysis,1,2024-12-27 12:13:48.347732+00,2024-12-27 12:13:48.347732+00
+18,PRO,profile_analysis,monthly_limit,10,2024-12-27 12:13:48.347732+00,2024-12-27 12:13:48.347732+00
+19,PRO,post_optimization,max_per_post,8,2024-12-27 12:13:48.347732+00,2024-12-29 16:29:29.482239+00
+20,PRO,post_optimization,monthly_limit,60,2024-12-27 12:13:48.347732+00,2024-12-27 12:13:48.347732+00
+22,FREE,batch_analysis,monthly_limit,0,2024-12-27 17:30:02.343854+00,2024-12-27 17:30:02.343854+00
+23,PREMIUM,batch_analysis,monthly_limit,10,2024-12-27 17:30:02.343854+00,2024-12-27 17:30:02.343854+00
+24,PRO,batch_analysis,monthly_limit,30,2024-12-27 17:30:02.343854+00,2024-12-27 17:30:02.343854+00

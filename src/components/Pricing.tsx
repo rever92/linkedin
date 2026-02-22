@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Price, createCheckoutSession, getActiveProducts } from '../lib/stripe';
-import { supabase } from '../lib/supabase';
-import { User } from '@supabase/supabase-js';
+import { api } from '../lib/api';
+import { AuthUser } from '../types/auth';
 import { Check, Timer, Lock } from 'lucide-react';
 import Spinner from './ui/spinner';
 
@@ -141,23 +141,13 @@ const PricingCard: React.FC<{
 const Pricing: React.FC = () => {
     const [prices, setPrices] = useState<Price[]>([]);
     const [loading, setLoading] = useState(true);
-    const [user, setUser] = useState<User | null>(null);
+    const [user, setUser] = useState<AuthUser | null>(null);
     const [processingSubscription, setProcessingSubscription] = useState(false);
 
     useEffect(() => {
-        supabase.auth.getUser().then(({ data: { user } }) => {
-            setUser(user);
-        });
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setUser(session?.user ?? null);
-        });
-
+        const currentUser = api.getUser();
+        setUser(currentUser);
         fetchPrices();
-
-        return () => {
-            subscription.unsubscribe();
-        };
     }, []);
 
     const fetchPrices = async () => {

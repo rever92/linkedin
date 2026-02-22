@@ -1,7 +1,6 @@
 import { LineChart, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
 
 interface NavbarProps {
   onLogin: () => void;

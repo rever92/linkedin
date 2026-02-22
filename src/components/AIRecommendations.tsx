@@ -5,7 +5,7 @@ import { Lightbulb, Brain } from 'lucide-react';
 import { analyzeProfileMetrics, ProfileAnalysis } from './utils/metrics-analyzer';
 import { LinkedInPost } from '../types';
 import Spinner from "@/components/ui/spinner";
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useUserRole } from '../hooks/useUserRole';
 import { usePremiumActions } from '../hooks/usePremiumActions';
 import PremiumBanner from './ui/premium-banner';
@@ -166,32 +166,22 @@ const AIRecommendations: React.FC<RecommendationsProps> = ({ data }) => {
         });
 
         // Obtener el usuario actual
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        const user = api.getUser();
 
-        if (userError) {
-          console.error('Error al obtener el usuario:', userError);
-          return;
-        }
-
-        if (user) {
-          recommendationsData.user_id = user.id;
-        } else {
+        if (!user) {
           console.error('Usuario no autenticado');
           return;
         }
 
-        // Insertar las recomendaciones en Supabase
-        const { data: insertData, error: insertError } = await supabase
-          .from('recommendations')
-          .insert([recommendationsData])
-          .select();
+        recommendationsData.user_id = user.id;
 
-        if (insertError) {
-          throw insertError;
-        } else if (insertData && insertData.length > 0) {
+        // Insertar las recomendaciones
+        const insertData = await api.saveRecommendation(recommendationsData);
+
+        if (insertData) {
           // Registrar la acción premium
           await registerAction('profile_analysis', {
-            recommendations_id: insertData[0].id,
+            recommendations_id: insertData._id || insertData.id,
             metrics_analyzed: Object.keys(baseAnalysis)
           });
 
@@ -231,31 +221,21 @@ const AIRecommendations: React.FC<RecommendationsProps> = ({ data }) => {
       }
 
       try {
-        const { data: { user }, error: userError } = await supabase.auth.getUser();
+        const user = api.getUser();
 
-        if (userError || !user) {
-          console.error('Error al obtener el usuario:', userError || 'No autenticado');
+        if (!user) {
+          console.error('Usuario no autenticado');
           setInitialLoading(false);
           return;
         }
 
         // Obtener las últimas recomendaciones y el perfil del usuario en paralelo
-        const [recommendationsResponse, userProfileResponse] = await Promise.all([
-          supabase
-            .from('recommendations')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('date_generated', { ascending: false })
-            .limit(1),
-          supabase
-            .from('user_profiles')
-            .select('subscription_start_date, next_billing_date')
-            .eq('id', user.id)
-            .single()
+        const [latestRecommendationResponse, userProfile] = await Promise.all([
+          api.getLatestRecommendation().catch(() => null),
+          api.getUserProfile().catch(() => null)
         ]);
 
-        const recommendationsData = recommendationsResponse.data;
-        const userProfile = userProfileResponse.data;
+        const recommendationsData = latestRecommendationResponse ? [latestRecommendationResponse] : [];
 
         if (!userProfile) {
           console.error('No se pudo obtener el perfil del usuario');
@@ -267,35 +247,23 @@ const AIRecommendations: React.FC<RecommendationsProps> = ({ data }) => {
 
         // Obtener el número de análisis en el ciclo actual
         let cycleAnalyses = 0;
-        let cycleActionsResponse;
 
         if (userProfile?.subscription_start_date) {
           console.log('Debug - Usando ciclo personalizado');
-          cycleActionsResponse = await supabase.rpc('get_current_cycle_actions', {
-            p_user_id: user.id,
-            p_subscription_start_date: userProfile.subscription_start_date
-          });
-          
-          console.log('Debug - Acciones del ciclo:', cycleActionsResponse.data);
-          cycleAnalyses = cycleActionsResponse.data?.find(
+          const cycleActions = await api.getPremiumCycleUsage();
+
+          console.log('Debug - Acciones del ciclo:', cycleActions);
+          cycleAnalyses = cycleActions?.find(
             (action: { action_type: string; count: number }) => action.action_type === 'profile_analysis'
           )?.count || 0;
         } else {
           console.log('Debug - Usando mes natural');
-          const startOfMonth = new Date();
-          startOfMonth.setDate(1);
-          startOfMonth.setHours(0, 0, 0, 0);
-          
-          console.log('Debug - Inicio del mes:', startOfMonth.toISOString());
-          const monthlyActionsResponse = await supabase
-            .from('premium_actions')
-            .select('id')
-            .eq('user_id', user.id)
-            .eq('action_type', 'profile_analysis')
-            .gte('created_at', startOfMonth.toISOString());
+          const monthlyActions = await api.getPremiumUsage();
 
-          console.log('Debug - Acciones mensuales:', monthlyActionsResponse.data);
-          cycleAnalyses = monthlyActionsResponse.data?.length || 0;
+          console.log('Debug - Acciones mensuales:', monthlyActions);
+          cycleAnalyses = monthlyActions?.find(
+            (a: any) => a.action_type === 'profile_analysis'
+          )?.count || 0;
         }
 
         console.log('Debug - Total de análisis en el ciclo:', cycleAnalyses);

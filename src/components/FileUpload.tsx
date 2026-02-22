@@ -1,7 +1,7 @@
 import { UploadCloud } from 'lucide-react';
 import Papa from 'papaparse';
 import { LinkedInPost } from '../types';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import { useState } from 'react';
 import Spinner from '@/components/ui/spinner';
 
@@ -38,7 +38,7 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
     setUpdateMessage(null);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = api.getUser();
       if (!user) throw new Error('No authenticated user found');
 
       Papa.parse(file, {
@@ -47,7 +47,7 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
             const posts = results.data.slice(1).map((row: any) => {
               let isoDate;
               const url = row[0];
-              
+
               // Extraer el ID de la publicación de la URL
               const postIdMatch = url.match(/(\d{19})/);
               if (postIdMatch) {
@@ -71,37 +71,12 @@ export default function FileUpload({ onDataLoaded }: FileUploadProps) {
                 comments: parseInt(row[5]) || 0,
                 shares: parseInt(row[6]) || 0,
                 post_type: row[7],
-                user_id: user.id
               };
             });
 
-            for (const post of posts) {
-              const { error: upsertError } = await supabase
-                .from('linkedin_posts')
-                .upsert([{
-                  url: post.url,
-                  date: post.date,
-                  text: post.text,
-                  views: post.views,
-                  likes: post.likes,
-                  comments: post.comments,
-                  shares: post.shares,
-                  post_type: post.post_type,
-                  user_id: user.id
-                }], {
-                  onConflict: 'url',
-                  ignoreDuplicates: false
-                });
+            await api.upsertPosts(posts);
 
-              if (upsertError) throw upsertError;
-            }
-
-            const { data: updatedPosts, error: loadError } = await supabase
-              .from('linkedin_posts')
-              .select('*')
-              .order('date', { ascending: false });
-
-            if (loadError) throw loadError;
+            const updatedPosts = await api.getPosts();
 
             onDataLoaded(updatedPosts);
             setUpdateMessage('Datos actualizados correctamente.');

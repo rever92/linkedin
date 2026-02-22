@@ -1,7 +1,7 @@
 // Analysis.tsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation, Routes, Route, Navigate } from 'react-router-dom';
-import { supabase } from '../lib/supabase';
+import { api } from '../lib/api';
 import Spinner from '@/components/ui/spinner';
 
 // Componentes
@@ -28,12 +28,7 @@ export default function Analysis() {
     const loadData = async () => {
       try {
         setLoading(true);
-        const { data: posts, error } = await supabase
-          .from('linkedin_posts')
-          .select('*')
-          .order('date', { ascending: false });
-
-        if (error) throw error;
+        const posts = await api.getPosts();
         if (isMounted) {
           setData(posts || []);
         }

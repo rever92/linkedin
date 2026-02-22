@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Post, PostState } from '../../types/posts';
+import { Post, PostState, getPostDate, getPostId } from '../../types/posts';
 import {
   Select,
   SelectContent,
@@ -24,7 +24,7 @@ import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { CalendarClock, Trash2, ArrowUpDown, Star, HelpCircle } from 'lucide-react';
 import { Button } from '../ui/button';
-import { supabase } from '../../lib/supabase';
+import { api } from '../../lib/api';
 import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 
@@ -76,19 +76,19 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
     
     switch (sortBy) {
       case 'created_asc':
-        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        return getPostDate(a).getTime() - getPostDate(b).getTime();
       case 'created_desc':
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        return getPostDate(b).getTime() - getPostDate(a).getTime();
       case 'scheduled_asc':
         if (!a.scheduled_datetime && !b.scheduled_datetime) {
-          return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          return getPostDate(a).getTime() - getPostDate(b).getTime();
         }
         if (!a.scheduled_datetime) return 1;
         if (!b.scheduled_datetime) return -1;
         return new Date(a.scheduled_datetime).getTime() - new Date(b.scheduled_datetime).getTime();
       case 'scheduled_desc':
         if (!a.scheduled_datetime && !b.scheduled_datetime) {
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+          return getPostDate(b).getTime() - getPostDate(a).getTime();
         }
         if (!a.scheduled_datetime) return 1;
         if (!b.scheduled_datetime) return -1;
@@ -115,15 +115,10 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
     if (!scheduledDate || !scheduledTime) return;
 
     try {
-      const { error } = await supabase
-        .from('posts')
-        .update({
-          state: 'planificado',
-          scheduled_datetime: new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
-        })
-        .eq('id', post.id);
-
-      if (error) throw error;
+      await api.updatePlannerPost(getPostId(post), {
+        state: 'planificado',
+        scheduled_datetime: new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
+      });
 
       setSchedulingPost(null);
       setScheduledDate('');
@@ -136,12 +131,7 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
 
   const handleDelete = async (postId: string) => {
     try {
-      const { error } = await supabase
-        .from('posts')
-        .update({ state: 'eliminado' })
-        .eq('id', postId);
-
-      if (error) throw error;
+      await api.updatePlannerPost(postId, { state: 'eliminado' });
 
       onPostUpdate();
       setPostToDelete(null);
@@ -169,7 +159,7 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
             </Button>
             <Button
               variant="destructive"
-              onClick={() => postToDelete && handleDelete(postToDelete.id)}
+              onClick={() => postToDelete && handleDelete(getPostId(postToDelete))}
             >
               Eliminar
             </Button>
@@ -239,9 +229,10 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
       <div className="space-y-3">
         {sortedPosts.map((post) => {
           const isToday = isPostForToday(post);
+          const postId = getPostId(post);
           return (
             <div
-              key={post.id}
+              key={postId}
               className={`group p-6 bg-white border transition-shadow duration-200 rounded-[25px] ${
                 isToday 
                   ? 'border-blue-400 shadow-lg ring-2 ring-blue-200' 
@@ -264,7 +255,7 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
                       {post.state}
                     </span>
                     <span className="text-sm text-muted-foreground">
-                      Creado el {format(new Date(post.created_at), "d 'de' MMMM, yyyy", { locale: es })}
+                      Creado el {format(getPostDate(post), "d 'de' MMMM, yyyy", { locale: es })}
                     </span>
                   </div>
                   <p className="line-clamp-2 text-foreground text-sm">
@@ -300,7 +291,7 @@ export default function PostList({ posts, onPostSelect, onPostUpdate }: PostList
                 </p>
               )}
 
-              {schedulingPost?.id === post.id && (
+              {schedulingPost && getPostId(schedulingPost) === postId && (
                 <div className="mt-4 p-6 bg-white border border-gray-200/50 shadow-md rounded-[25px] space-y-4">
                   <h4 className="text-sm font-medium flex items-center gap-2">
                     <CalendarClock className="w-4 h-4" />
