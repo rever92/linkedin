@@ -4,6 +4,9 @@ Plataforma de analytics y planificacion de contenido para LinkedIn. Permite anal
 
 ## Requisitos previos
 
+npm run dev:all
+
+
 - **Node.js** >= 18
 - **MongoDB** corriendo en local (puerto 27017) o remoto
 - Claves de **Stripe** (publishable + secret + webhook secret)
