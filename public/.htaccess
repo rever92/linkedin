@@ -2,6 +2,10 @@
   RewriteEngine On
   RewriteBase /
 
+  # NO tocar las peticiones a /api/ - dejar que lleguen a Node.js
+  RewriteCond %{REQUEST_URI} ^/api/
+  RewriteRule ^ - [L]
+
   # Si el archivo existe, servirlo directamente
   RewriteCond %{REQUEST_FILENAME} -f
   RewriteRule ^ - [L]
