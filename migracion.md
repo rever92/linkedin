@@ -134,7 +134,7 @@ mongodump --db linksight --out ./dump
 Sube la carpeta `dump/` al VPS y restaura:
 
 ```bash
-mongorestore --db linksight ./dump/linksight
+mongorestore --db linksight ./linksight
 ```
 
 ### Opcion B: Ejecutar el script de migracion
