@@ -106,7 +106,7 @@ export default function App() {
         path="/login"
         element={
           isAuthenticated ? (
-            <Navigate to="/analysis" replace />
+            <Navigate to="/planner/calendar" replace />
           ) : (
             renderLayout(<Auth />)
           )
@@ -146,7 +146,7 @@ export default function App() {
       />
 
       <Route path="/auth" element={<Navigate to="/login" replace />} />
-      <Route path="/dashboard/*" element={<Navigate to="/analysis" replace />} />
+      <Route path="/dashboard/*" element={<Navigate to="/planner/calendar" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -19,7 +19,7 @@ export default function Auth({ onClose }: AuthProps) {
   useEffect(() => {
     const session = api.getStoredSession();
     if (session) {
-      window.location.href = '/analysis';
+      window.location.href = '/planner/calendar';
     }
   }, []);
 
@@ -53,7 +53,7 @@ export default function Auth({ onClose }: AuthProps) {
 
       // Full reload to re-initialize useAuth with the new session
       setTimeout(() => {
-        window.location.href = '/analysis';
+        window.location.href = '/planner/calendar';
       }, 500);
     } catch (error: any) {
       setMessage({

@@ -17,7 +17,7 @@ export default function Navbar({ onLogin, session }: NavbarProps) {
 
   const handleAction = () => {
     if (session) {
-      navigate('/dashboard/analysis');
+      navigate('/planner/calendar');
     } else {
       onLogin();
     }

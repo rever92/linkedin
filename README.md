@@ -1,11 +1,19 @@
 # Linksight
 
-Plataforma de analytics y planificacion de contenido para LinkedIn. Permite analizar el rendimiento de tus publicaciones, obtener recomendaciones con IA y planificar tu contenido.
+Plataforma de analytics y optimizacion de contenido para LinkedIn. Analiza el rendimiento de tus publicaciones, optimiza tu contenido con IA y planifica tu estrategia.
 
-## Requisitos previos
+PWA installable con soporte offline.
 
-npm run dev:all
+## Stack
 
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui
+- **Backend**: Express.js + MongoDB (Mongoose)
+- **Auth**: JWT (access token 15min + refresh token 7d con rotacion)
+- **Pagos**: Stripe (checkout, portal, webhooks)
+- **IA**: Google Gemini API (optimizacion de posts, analisis de perfil, categorizacion)
+- **PWA**: vite-plugin-pwa + Workbox (installable, cache del shell, offline)
+
+## Requisitos
 
 - **Node.js** >= 18
 - **MongoDB** corriendo en local (puerto 27017) o remoto
@@ -15,7 +23,7 @@ npm run dev:all
 ## Instalacion
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/rever92/linkedin.git
 cd linkedin
 npm install
 ```
@@ -24,11 +32,9 @@ npm install
 
 ### Backend (`server/.env`)
 
-Crea el archivo `server/.env` con las siguientes variables:
-
 ```env
 MONGODB_URI=mongodb://localhost:27017/linksight
-JWT_SECRET=cambia-esto-por-una-cadena-segura-de-min-32-chars
+JWT_SECRET=cadena-aleatoria-larga-min-32-chars
 JWT_EXPIRES_IN=15m
 REFRESH_TOKEN_EXPIRES_IN=7d
 STRIPE_SECRET_KEY=sk_...
@@ -54,141 +60,189 @@ VITE_GEMINI_API_KEY=tu-clave-gemini
 VITE_STRIPE_PUBLISHABLE_KEY=pk_...
 ```
 
+Las variables `VITE_*` se incrustan en el build. Deben existir antes de ejecutar `npm run build`.
+
 ## Desarrollo
 
-Necesitas dos terminales:
-
-**Terminal 1 - Backend (Express + MongoDB):**
-
 ```bash
-npm run dev:server
+npm run dev:all
 ```
 
-Arranca el servidor Express en el puerto 3001 con nodemon (auto-reload).
+Arranca frontend (Vite, puerto 5173) y backend (Express + nodemon, puerto 3001) simultaneamente. Las peticiones a `/api` se redirigen al backend via proxy en `vite.config.ts`.
 
-**Terminal 2 - Frontend (Vite):**
+Abrir `http://localhost:5173`.
+
+## Funcionalidades
+
+### Analytics de LinkedIn
+- Importacion de datos via CSV o extension de Chrome
+- Dashboard con metricas: visualizaciones, reacciones, comentarios, compartidos
+- Analisis por tipo de contenido, horarios y tendencias
+- Categorizacion automatica de posts con Gemini AI
+
+### Optimizacion con IA
+- Analisis completo del perfil con recomendaciones personalizadas
+- Optimizacion de posts (compara original vs version optimizada)
+- Recomendaciones de contenido, horarios, frecuencia y engagement
+- Historial de analisis con limites segun plan
+
+### Planificador de contenido
+- Crear, editar y programar publicaciones
+- Filtros por estado (borrador, listo, planificado) y ordenacion
+- Programacion por fecha y hora
+- Vista de posts del dia destacados
+
+### Planes y suscripciones
+- Tres planes: Free, Pro, Business
+- Integracion completa con Stripe (checkout, portal de cliente, webhooks)
+- Limites de uso por plan (analisis de perfil, optimizaciones, categorizaciones)
+- Si Stripe no esta configurado, la app funciona sin pagos
+
+### PWA
+- Installable en movil y escritorio
+- Cache del shell (JS, CSS, HTML, iconos)
+- Soporte offline basico
+- Manifest con iconos 192x192 y 512x512
+
+### Extension de Chrome
+- Sincronizacion de sesion con la extension para scrapear datos de LinkedIn
+
+## Despliegue en VPS (Plesk + Node.js)
+
+### 1. Subir codigo
 
 ```bash
-npm run dev
+# En el VPS, dentro del directorio del subdominio (/httpdocs)
+git pull origin master
+npm install
 ```
 
-Arranca Vite en el puerto 5173. Las peticiones a `/api` se redirigen automaticamente al backend gracias al proxy configurado en `vite.config.ts`.
+### 2. Crear `.env.production` en la raiz
 
-Abre `http://localhost:5173` en el navegador.
+```env
+VITE_API_URL=/api
+VITE_GEMINI_API_KEY=tu-clave-gemini
+VITE_STRIPE_PUBLISHABLE_KEY=pk_live_...
+```
 
-## Produccion
+### 3. Build
 
-### Build
+Desde Plesk: **Run Script** > `build`, o por SSH:
 
 ```bash
 npm run build
 ```
 
-Genera los archivos estaticos en `dist/`.
+### 4. Variables de entorno del backend
 
-### Arrancar servidor
+Configurar en **Plesk > Node.js > Environment Variables** (no usar .env en produccion):
 
-```bash
-NODE_ENV=production npm start
-```
+- `MONGODB_URI`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `REFRESH_TOKEN_EXPIRES_IN`
+- `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+- `APP_URL=https://tu-dominio.com`
+- `NODE_ENV=production`
 
-En produccion, Express sirve tanto la API (`/api/*`) como los archivos estaticos desde `dist/`.
+### 5. Configuracion de Plesk Node.js
 
-### Deploy en VPS con Apache
+| Campo | Valor |
+|---|---|
+| Application startup file | `server/index.js` |
+| Document root | `/httpdocs/dist` |
+| Application root | `/httpdocs` |
 
-Configuracion de Apache como reverse proxy:
+### 6. Restart App
+
+Pulsar **Restart App** en Plesk.
+
+### Fix: SPA routing con Apache (.htaccess)
+
+Plesk usa Apache delante de Node.js. Cuando el usuario navega a `/login` o `/analysis`, Apache busca esos archivos en `dist/` y da 500 porque no existen (es una SPA).
+
+El fix es el archivo `public/.htaccess` que se copia a `dist/` en cada build:
 
 ```apache
-ProxyPass /api http://localhost:3001/api
-ProxyPassReverse /api http://localhost:3001/api
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # NO tocar /api/ - dejar que lleguen a Node.js
+  RewriteCond %{REQUEST_URI} ^/api/
+  RewriteRule ^ - [L]
+
+  # Archivos y directorios existentes se sirven directamente
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^ - [L]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Todo lo demas -> index.html (SPA fallback)
+  RewriteRule ^ index.html [L]
+</IfModule>
 ```
 
-Gestionar el proceso con PM2:
+Sin este archivo, cualquier ruta que no sea `/` da error 500 en produccion. El archivo vive en `public/` para que Vite lo copie automaticamente a `dist/` con cada build.
 
-```bash
-pm2 start server/index.js --name linksight-api
-```
+### Stripe webhook
 
-## Estructura del proyecto
+Actualizar en [Stripe Dashboard > Webhooks](https://dashboard.stripe.com/webhooks):
 
-```
-linkedin/
-  src/                    # Frontend React
-    components/           # Componentes UI
-    hooks/                # Custom hooks (useAuth, useUserRole, usePremiumActions)
-    lib/                  # API client, stripe, utils
-    types/                # TypeScript types
-  server/                 # Backend Express
-    config/               # Conexion MongoDB
-    middleware/            # Auth JWT, error handler
-    models/               # Modelos Mongoose (User, LinkedInPost, PlannerPost, etc.)
-    routes/               # Rutas API (auth, posts, premium, stripe, planner, etc.)
-    services/             # Logica de negocio (premiumService)
-  dist/                   # Build de produccion (generado)
-```
+- URL: `https://tu-dominio.com/api/stripe/webhook`
+- Eventos: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
 
-## Funcionalidades
+## Scripts
 
-### Autenticacion
-- Registro e inicio de sesion con email y password
-- JWT con access token (15 min) y refresh token (7 dias con rotacion)
+| Script | Descripcion |
+|---|---|
+| `npm run dev` | Frontend dev (Vite, puerto 5173) |
+| `npm run dev:server` | Backend dev (nodemon, puerto 3001) |
+| `npm run dev:all` | Frontend + backend simultaneos |
+| `npm run build` | Build de produccion (dist/) |
+| `npm start` | Servidor de produccion |
+| `node server/scripts/reset-password.js <email> <pass>` | Resetear contraseña de usuario |
+| `node server/scripts/migrate-from-supabase.js` | Migrar datos desde CSV de Supabase |
 
-### Analytics
-- Subida de datos de LinkedIn via CSV
-- Dashboard con metricas (visualizaciones, reacciones, comentarios, compartidos)
-- Analisis avanzado por tipo de contenido, horarios y tendencias
-- Categorizacion automatica de posts con Gemini AI
-
-### Recomendaciones IA
-- Analisis completo del perfil con Gemini AI
-- Recomendaciones de contenido, horarios, frecuencia y estrategias de engagement
-- Historial de analisis con limites segun el plan
-
-### Planificador de contenido
-- Crear, editar y programar publicaciones
-- Vista de lista y calendario
-- Optimizacion de posts con IA (compara original vs optimizado)
-
-### Planes y suscripciones
-- Tres planes: Free, Premium y Pro
-- Integracion con Stripe (checkout, portal de cliente, webhooks)
-- Limites de uso por plan (analisis de perfil, optimizaciones, categorizaciones)
-
-### Extension de Chrome
-- Sincronizacion de sesion con la extension de Chrome para scrapear datos de LinkedIn
-
-## API Endpoints
+## API
 
 | Metodo | Ruta | Descripcion |
-|--------|------|-------------|
+|---|---|---|
 | POST | `/api/auth/register` | Registro |
 | POST | `/api/auth/login` | Login |
 | POST | `/api/auth/refresh` | Refrescar token |
 | GET | `/api/auth/me` | Perfil del usuario |
 | POST | `/api/auth/logout` | Cerrar sesion |
 | GET | `/api/posts` | Posts de LinkedIn del usuario |
-| POST | `/api/posts/upsert` | Upsert batch de posts (CSV) |
-| PUT | `/api/posts/:url/category` | Actualizar categoria de un post |
-| GET | `/api/premium/limits` | Limites del plan actual |
+| POST | `/api/posts/upsert` | Upsert batch de posts |
+| PUT | `/api/posts/:url/category` | Actualizar categoria |
+| GET | `/api/premium/limits` | Limites del plan |
 | GET | `/api/premium/usage` | Uso mensual |
-| GET | `/api/premium/cycle-usage` | Uso del ciclo de facturacion |
+| GET | `/api/premium/cycle-usage` | Uso del ciclo |
 | POST | `/api/premium/actions` | Registrar accion premium |
 | GET | `/api/products` | Productos y precios activos |
 | POST | `/api/stripe/checkout` | Crear sesion de checkout |
-| POST | `/api/stripe/portal` | Crear sesion del portal |
+| POST | `/api/stripe/portal` | Portal de facturacion |
 | POST | `/api/stripe/webhook` | Webhook de Stripe |
 | GET | `/api/planner/posts` | Posts del planificador |
 | POST | `/api/planner/posts` | Crear post |
 | PUT | `/api/planner/posts/:id` | Actualizar post |
+| POST | `/api/planner/posts/:id/optimizations` | Guardar optimizacion |
 | GET | `/api/recommendations/latest` | Ultima recomendacion |
 | POST | `/api/recommendations` | Guardar recomendacion |
 
-## Scripts disponibles
+## Estructura
 
-| Script | Descripcion |
-|--------|-------------|
-| `npm run dev` | Frontend en modo desarrollo (Vite, puerto 5173) |
-| `npm run dev:server` | Backend en modo desarrollo (nodemon, puerto 3001) |
-| `npm run build` | Build de produccion |
-| `npm start` | Arrancar servidor de produccion |
-| `npm run lint` | Linter TypeScript |
+```
+linkedin/
+  src/                    # Frontend React + TypeScript
+    components/           # Componentes UI (Analysis, Planner, Auth, etc.)
+    hooks/                # useAuth, useUserRole, usePremiumActions
+    lib/                  # ApiClient, stripe, theme, extensionCommunication
+    types/                # TypeScript types (auth, posts)
+  server/                 # Backend Express
+    config/               # Conexion MongoDB
+    middleware/            # Auth JWT, error handler
+    models/               # Mongoose: User, LinkedInPost, PlannerPost, etc.
+    routes/               # auth, posts, premium, stripe, planner, recommendations
+    scripts/              # migrate-from-supabase, reset-password
+  public/                 # Assets estaticos (iconos PWA, .htaccess, favicon)
+  dist/                   # Build de produccion (generado, en .gitignore)
+```

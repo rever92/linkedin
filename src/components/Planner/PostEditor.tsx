@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Post, PostState, AIGeneratedImage } from '../../types/posts';
+import { Post, PostState, AIGeneratedImage, getPostId } from '../../types/posts';
 import { api } from '../../lib/api';
 import {
   Dialog,
@@ -91,7 +91,7 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
     loading: actionLoading,
     error: actionError
   } = usePremiumActions();
-  const [currentPostId, setCurrentPostId] = useState<string | null>(post?.id || null);
+  const [currentPostId, setCurrentPostId] = useState<string | null>(post ? getPostId(post) || null : null);
   const [isNewPostCreated, setIsNewPostCreated] = useState(false);
 
   // Si se proporciona una fecha inicial, mostrar automáticamente el programador
@@ -100,6 +100,10 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
       setState('planificado');
     }
   }, [initialDate, post]);
+
+  useEffect(() => {
+    setCurrentPostId(post ? getPostId(post) || null : null);
+  }, [post]);
 
   // Efecto para cambiar el estado a "planificado" cuando se selecciona una fecha
   useEffect(() => {
@@ -135,7 +139,7 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
         // Crear nuevo post
         const newPost = await api.createPlannerPost(postData);
         if (newPost) {
-          setCurrentPostId(newPost._id || newPost.id);
+          setCurrentPostId(getPostId(newPost) || null);
           setIsNewPostCreated(true);
         }
       }
@@ -193,7 +197,7 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
           const newPost = await api.createPlannerPost(postData);
           if (!newPost) throw new Error('Error al guardar el post');
 
-          postId = newPost._id || newPost.id;
+          postId = getPostId(newPost);
           setCurrentPostId(postId); // Actualizar el estado con el nuevo ID
           setIsNewPostCreated(true);
           console.log('📝 Borrador temporal guardado con ID:', postId);
@@ -406,7 +410,7 @@ Proporciona el post mejorado en formato texto, listo para ser publicado en Linke
       return allPosts.some(p => {
         if (!p.scheduled_datetime) return false;
         const postDate = format(new Date(p.scheduled_datetime), 'yyyy-MM-dd');
-        return postDate === dateString && (currentPostId !== p.id); // Excluir el post actual
+        return postDate === dateString && (currentPostId !== getPostId(p)); // Excluir el post actual
       });
     } catch (error) {
       console.error('Error al verificar posts programados:', error);
