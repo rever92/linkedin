@@ -20,7 +20,7 @@ import {
 } from '../ui/select';
 import { Input } from '../ui/input';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, Clock, Image as ImageIcon, Brain, Sparkles } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, Image as ImageIcon, Brain, Sparkles, Trash2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog as DialogPrimitive } from '@radix-ui/react-dialog';
 import { GoogleGenerativeAI } from '@google/generative-ai';
@@ -83,8 +83,10 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizationError, setOptimizationError] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const {
     registerAction,
     checkPostOptimizationLimit,
@@ -401,6 +403,23 @@ Proporciona el post mejorado en formato texto, listo para ser publicado en Linke
     }
   };
 
+  const handleDelete = async () => {
+    if (!currentPostId) return;
+
+    try {
+      setIsDeleting(true);
+      setError(null);
+      await api.updatePlannerPost(currentPostId, { state: 'eliminado' });
+      setShowDeleteDialog(false);
+      onSave();
+    } catch (error: any) {
+      console.error('Error al eliminar el post:', error);
+      setError(error.message || 'Error al eliminar la publicación');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Función para determinar si una fecha tiene posts programados
   const hasScheduledPostsOnDate = (date: Date) => {
     try {
@@ -709,12 +728,24 @@ Proporciona el post mejorado en formato texto, listo para ser publicado en Linke
 
             {/* Footer con botones */}
             <div className="border-t p-4 flex justify-between items-center bg-gray-50">
-              <Button variant="ghost" onClick={onClose} className="text-gray-600">
-                Cancelar
-              </Button>
+              <div className="flex items-center gap-2">
+                {currentPostId && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => setShowDeleteDialog(true)}
+                    disabled={isSaving || isDeleting}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Eliminar
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={onClose} className="text-gray-600">
+                  Cancelar
+                </Button>
+              </div>
               <Button
                 onClick={handleSave}
-                disabled={isSaving || !content.trim()}
+                disabled={isSaving || isDeleting || !content.trim()}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 {isSaving ? (
@@ -751,6 +782,44 @@ Proporciona el post mejorado en formato texto, listo para ser publicado en Linke
               className="bg-blue-600 hover:bg-blue-700 "
             >
               Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de confirmación para eliminar */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="sm:max-w-[420px] bg-white shadow-lg">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-medium text-gray-800 ">Eliminar publicación</DialogTitle>
+            <DialogDescription className="text-sm text-gray-500 ">
+              Esta acción enviará solo esta publicación a estado eliminado. No afectará a otros duplicados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border bg-gray-50 p-3 text-sm text-gray-700">
+            <p><strong>ID:</strong> {currentPostId || 'sin id'}</p>
+            <p>
+              <strong>Programación:</strong>{' '}
+              {scheduledDate
+                ? `${scheduledDate}${scheduledTime ? ` ${scheduledTime}` : ''}`
+                : 'sin fecha'}
+            </p>
+            <p><strong>Contenido:</strong> {(content || '').slice(0, 100)}{content.length > 100 ? '...' : ''}</p>
+          </div>
+          <DialogFooter className="flex justify-end gap-2 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={isDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting || !currentPostId}
+            >
+              {isDeleting ? 'Eliminando...' : 'Sí, eliminar'}
             </Button>
           </DialogFooter>
         </DialogContent>

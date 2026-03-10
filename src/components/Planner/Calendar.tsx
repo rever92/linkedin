@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Post } from '../../types/posts';
+import { Post, getPostId } from '../../types/posts';
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, startOfWeek, endOfWeek, isSameMonth, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
@@ -109,7 +109,7 @@ export default function Calendar({ posts, onPostSelect, onDateSelect }: Calendar
                 {isCurrentMonth && dayPosts.map((post, i) => (
                   i < 2 ? (
                     <div
-                      key={post.id}
+                      key={getPostId(post) || `${day.toISOString()}-${i}`}
                       onClick={(e) => {
                         e.stopPropagation();
                         onPostSelect(post);
