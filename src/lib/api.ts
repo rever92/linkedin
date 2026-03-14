@@ -1,4 +1,12 @@
 import { AuthSession, AuthUser } from '../types/auth';
+import {
+  ContentPlan,
+  ContentPlanItem,
+  GeneratePlanRequest,
+  PlanEditorContext,
+  Post,
+  StrategyProfile,
+} from '../types/posts';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 const STORAGE_KEY = 'linksight_auth';
@@ -207,18 +215,18 @@ class ApiClient {
   }
 
   // === Planner ===
-  async getPlannerPosts(): Promise<any[]> {
+  async getPlannerPosts(): Promise<Post[]> {
     return this.request('/planner/posts');
   }
 
-  async createPlannerPost(data: any): Promise<any> {
+  async createPlannerPost(data: Partial<Post>): Promise<Post> {
     return this.request('/planner/posts', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   }
 
-  async updatePlannerPost(id: string, data: any): Promise<any> {
+  async updatePlannerPost(id: string, data: Partial<Post>): Promise<Post> {
     return this.request(`/planner/posts/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -230,6 +238,82 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  async optimizePlannerPost(postId: string, content: string): Promise<{ optimized_content: string; context_used: any }> {
+    return this.request(`/planner/posts/${postId}/optimize`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
+  async getStrategyProfile(): Promise<StrategyProfile | null> {
+    return this.request('/planner/strategy');
+  }
+
+  async saveStrategyProfile(data: StrategyProfile): Promise<StrategyProfile> {
+    return this.request('/planner/strategy', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getContentPlans(): Promise<ContentPlan[]> {
+    return this.request('/planner/plans');
+  }
+
+  async generateContentPlan(data: GeneratePlanRequest): Promise<ContentPlan> {
+    return this.request('/planner/plans/generate', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getContentPlan(id: string): Promise<ContentPlan> {
+    return this.request(`/planner/plans/${id}`);
+  }
+
+  async updateContentPlan(id: string, data: Partial<ContentPlan>): Promise<ContentPlan> {
+    return this.request(`/planner/plans/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteContentPlan(id: string): Promise<{ success: boolean; deleted_plan_id: string; deleted_posts: number }> {
+    return this.request(`/planner/plans/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async approveContentPlan(id: string): Promise<ContentPlan> {
+    return this.request(`/planner/plans/${id}/approve`, {
+      method: 'POST',
+    });
+  }
+
+  async updateContentPlanItem(planId: string, itemId: string, data: Partial<ContentPlanItem>): Promise<ContentPlanItem> {
+    return this.request(`/planner/plans/${planId}/items/${itemId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async regenerateContentPlanItem(planId: string, itemId: string, extra_instructions = ''): Promise<ContentPlanItem> {
+    return this.request(`/planner/plans/${planId}/items/${itemId}/regenerate`, {
+      method: 'POST',
+      body: JSON.stringify({ extra_instructions }),
+    });
+  }
+
+  async createPlannerPostFromPlanItem(planId: string, itemId: string): Promise<{ post: Post; item: ContentPlanItem }> {
+    return this.request(`/planner/plans/${planId}/items/${itemId}/convert`, {
+      method: 'POST',
+    });
+  }
+
+  async getPlanEditorContext(planId: string, itemId: string): Promise<PlanEditorContext> {
+    return this.request(`/planner/plans/${planId}/items/${itemId}/context`);
   }
 
   // === Recommendations ===

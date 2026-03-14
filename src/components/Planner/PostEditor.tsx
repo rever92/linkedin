@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Post, PostState, AIGeneratedImage, getPostId } from '../../types/posts';
+import { Post, PostState, AIGeneratedImage, PlanEditorContext, getPostId } from '../../types/posts';
 import { api } from '../../lib/api';
 import {
   Dialog,
@@ -23,20 +23,17 @@ import { format } from 'date-fns';
 import { Calendar as CalendarIcon, Clock, Image as ImageIcon, Brain, Sparkles, Trash2 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Dialog as DialogPrimitive } from '@radix-ui/react-dialog';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import ReactMarkdown from 'react-markdown';
 import { usePremiumActions } from '../../hooks/usePremiumActions';
-import { motion } from 'framer-motion';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Calendar } from '../ui/calendar';
 import { es } from 'date-fns/locale';
 import { cn } from '../../lib/utils';
-
-// Mover la inicialización dentro de una función para evitar problemas con import.meta
-const getGoogleAI = () => {
-  const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
-  return genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
-};
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '../ui/hover-card';
 
 const MAX_OPTIMIZATIONS_PER_POST = 3;
 const MAX_MONTHLY_OPTIMIZATIONS = 30;
@@ -47,6 +44,7 @@ interface PostEditorProps {
   onClose: () => void;
   onSave: () => void;
   allPosts?: Post[]; // Lista de todos los posts para identificar fechas ocupadas
+  planContext?: PlanEditorContext | null;
 }
 
 const imageStyles = [
@@ -57,7 +55,7 @@ const imageStyles = [
   { id: 'watercolor', name: 'Acuarela', preview: '/styles/watercolor.png' },
 ];
 
-export default function PostEditor({ post, initialDate, onClose, onSave, allPosts = [] }: PostEditorProps) {
+export default function PostEditor({ post, initialDate, onClose, onSave, allPosts = [], planContext = null }: PostEditorProps) {
   const [content, setContent] = useState(post?.content || '');
   const [state, setState] = useState<PostState>(post?.state || 'borrador');
   const [scheduledDate, setScheduledDate] = useState(
@@ -242,62 +240,8 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
 
       console.log('✨ Acción premium registrada');
 
-      // Obtener recomendaciones y posts
-      const recentRecommendation = await api.getLatestRecommendation().catch(() => null);
-
-      const allLinkedInPosts = await api.getPosts();
-      const oneYearAgo = new Date();
-      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-      const topPosts = allLinkedInPosts
-        .filter((p: any) => new Date(p.date) >= oneYearAgo)
-        .sort((a: any, b: any) => (b.views || 0) - (a.views || 0))
-        .slice(0, 10);
-
-      // Generar el prompt
-      const prompt = `Eres un experto en comunicación digital y marketing de contenidos con amplia experiencia en LinkedIn. Tu tarea es optimizar un post de un usuario manteniendo su tono personal y auténtico mientras incorporas las mejores prácticas de engagement.
-
-<post_original>
-${content}
-</post_original>
-
-<recomendaciones_engagement>
-${JSON.stringify(recentRecommendation || {}, null, 2)}
-</recomendaciones_engagement>
-
-<posts_del_autor>
-${JSON.stringify(topPosts || [], null, 2)}
-</posts_del_autor>
-
-Para crear una versión mejorada del post, deberás seguir las instrucciones de <recomendaciones_engagement>, así como unas pautas adicionales:
-- Mantener el mensaje clave del post original
-- Conservar el tono habitual del autor en base a sus posts anteriores que encontrarás en <posts_del_autor>
-- Incorporar al menos una pregunta abierta que invite a la participación
-- Utilizar emojis estratégicamente para mejorar la legibilidad (solo si el autor los utiliza habitualmente en sus posts)
-- Estructurar el contenido con espaciado y formato visual atractivo
-- Incluir una llamada a la acción claro al final
-- Asegurar que el contenido sea conciso y directo
-- Respeta siempre el idioma original en el que suele publicar el usuario, aunque parte del contenido del borrador de la nueva publicación esté en otro idioma. 
-
-Para validar la calidad del contenido optimizado, verifica que:
-- Mantiene la voz y personalidad del autor original
-- No excede la longitud recomendada
-- Incluye elementos visuales (emojis) de manera efectiva
-- Tiene una estructura clara y fácil de leer
-- Genera oportunidades de interacción
-- Conserva el valor y la utilidad del contenido original
-
-Proporciona el post mejorado en formato texto, listo para ser publicado en LinkedIn, manteniendo los saltos de línea y emojis apropiados.`;
-
-      console.log('📝 Prompt generado:', prompt);
-
-      // Inicializar el modelo dentro de la función
-      const model = getGoogleAI();
-      console.log('🤖 Modelo inicializado, enviando prompt...');
-
-      const result = await model.generateContent(prompt);
-      console.log('✨ Respuesta recibida:', result);
-
-      const optimizedText = result.response.text();
+      const result = await api.optimizePlannerPost(postId, content);
+      const optimizedText = result.optimized_content;
       console.log('📄 Texto optimizado:', optimizedText);
 
       setOptimizedContent(optimizedText);
@@ -329,7 +273,8 @@ Proporciona el post mejorado en formato texto, listo para ser publicado en Linke
       // Guardar la optimización en la tabla de historial
       await api.savePlannerOptimization(postId, {
         original_content: originalContent || content,
-        optimized_content: optimizedContent
+        optimized_content: optimizedContent,
+        plan_item_id: post?.plan_item_id || planContext?.planItem?._id || null,
       });
 
       // Actualizar el contenido en el estado local
@@ -483,6 +428,37 @@ Proporciona el post mejorado en formato texto, listo para ser publicado en Linke
                   {successMessage && (
                     <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md border border-green-100 flex items-center ">
                       <span className="mr-2">✅</span> {successMessage}
+                    </div>
+                  )}
+
+                  {planContext?.planItem && (
+                    <div className="flex items-center justify-start">
+                      <HoverCard>
+                        <HoverCardTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700"
+                          >
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Procede de un plan IA
+                          </button>
+                        </HoverCardTrigger>
+                        <HoverCardContent align="start" className="w-96">
+                          <div className="space-y-2 text-sm text-gray-700">
+                            <p><strong>Tema:</strong> {planContext.planItem.topic}</p>
+                            <p><strong>Formato:</strong> {planContext.planItem.content_type || 'No definido'}</p>
+                            <p><strong>Pain point:</strong> {planContext.planItem.pain_point || 'No definido'}</p>
+                            <p><strong>Contrarian insight:</strong> {planContext.planItem.contrarian_insight || 'No definido'}</p>
+                            <p><strong>Objetivo:</strong> {planContext.planItem.objective || 'No definido'}</p>
+                            <p><strong>CTA:</strong> {planContext.planItem.cta || 'No definido'}</p>
+                            {planContext.strategy && (
+                              <p>
+                                <strong>Tono:</strong> {planContext.strategy.tone || 'No definido'} · <strong>Target:</strong> {planContext.strategy.target_audience || 'No definido'}
+                              </p>
+                            )}
+                          </div>
+                        </HoverCardContent>
+                      </HoverCard>
                     </div>
                   )}
 

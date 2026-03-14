@@ -12,6 +12,11 @@ const postOptimizationSchema = new mongoose.Schema({
     required: true,
     index: true,
   },
+  plan_item_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ContentPlanItem',
+    default: null,
+  },
   original_content: {
     type: String,
     required: true,
