@@ -34,6 +34,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from '../ui/hover-card';
+import { LINKEDIN_CONTENT_FORMATS } from './linkedinFormats';
 
 const MAX_OPTIMIZATIONS_PER_POST = 3;
 const MAX_MONTHLY_OPTIMIZATIONS = 30;
@@ -57,6 +58,7 @@ const imageStyles = [
 
 export default function PostEditor({ post, initialDate, onClose, onSave, allPosts = [], planContext = null }: PostEditorProps) {
   const [content, setContent] = useState(post?.content || '');
+  const [contentType, setContentType] = useState(post?.content_type || planContext?.planItem?.content_type || '');
   const [state, setState] = useState<PostState>(post?.state || 'borrador');
   const [scheduledDate, setScheduledDate] = useState(
     post?.scheduled_datetime
@@ -105,6 +107,10 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
     setCurrentPostId(post ? getPostId(post) || null : null);
   }, [post]);
 
+  useEffect(() => {
+    setContentType(post?.content_type || planContext?.planItem?.content_type || '');
+  }, [post, planContext]);
+
   // Efecto para cambiar el estado a "planificado" cuando se selecciona una fecha
   useEffect(() => {
     if (scheduledDate && state !== 'planificado') {
@@ -126,6 +132,7 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
       
       const postData = {
         content,
+        content_type: contentType,
         state,
         scheduled_datetime: state === 'planificado' && scheduledDate
           ? new Date(`${scheduledDate}T${finalScheduledTime || '00:00'}`).toISOString()
@@ -186,11 +193,12 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
       if (!postId) {
         try {
           console.log('💾 Guardando borrador temporal antes de optimizar...');
-          const postData = {
-            content,
-            state: 'borrador', // Siempre guardar como borrador inicialmente
-            scheduled_datetime: state === 'planificado' && scheduledDate && scheduledTime
-              ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
+            const postData = {
+              content,
+              content_type: contentType,
+              state: 'borrador', // Siempre guardar como borrador inicialmente
+              scheduled_datetime: state === 'planificado' && scheduledDate && scheduledTime
+                ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
               : null,
           };
 
@@ -215,11 +223,12 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
         // Si hay cambios pendientes, actualizar el post antes de optimizarlo
         if (hasChanges()) {
           console.log('📝 Actualizando post existente antes de optimizar...');
-          const postData = {
-            content,
-            state,
-            scheduled_datetime: state === 'planificado' && scheduledDate && scheduledTime
-              ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
+            const postData = {
+              content,
+              content_type: contentType,
+              state,
+              scheduled_datetime: state === 'planificado' && scheduledDate && scheduledTime
+                ? new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
               : null,
           };
 
@@ -281,11 +290,12 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
       setContent(optimizedContent);
 
       // Actualizar el post con el nuevo contenido
-      await api.updatePlannerPost(postId, {
-        content: optimizedContent,
-        // Si es un post nuevo creado como borrador, mantener el estado que el usuario haya seleccionado
-        state: state
-      });
+        await api.updatePlannerPost(postId, {
+          content: optimizedContent,
+          content_type: contentType,
+          // Si es un post nuevo creado como borrador, mantener el estado que el usuario haya seleccionado
+          state: state
+        });
       
       // Cerrar la comparación
       setShowComparison(false);
@@ -321,9 +331,10 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
 
   const hasChanges = () => {
     if (!post) {
-      return content.trim() !== '' || state !== 'borrador' || scheduledDate !== '' || scheduledTime !== '';
+      return content.trim() !== '' || contentType !== '' || state !== 'borrador' || scheduledDate !== '' || scheduledTime !== '';
     }
     return content !== post.content ||
+      contentType !== (post.content_type || planContext?.planItem?.content_type || '') ||
       state !== post.state ||
       scheduledDate !== (post.scheduled_datetime ? format(new Date(post.scheduled_datetime), 'yyyy-MM-dd') : '') ||
       scheduledTime !== (post.scheduled_datetime ? format(new Date(post.scheduled_datetime), 'HH:mm') : '');
@@ -543,8 +554,28 @@ export default function PostEditor({ post, initialDate, onClose, onSave, allPost
                             </SelectContent>
                           </Select>
                         </div>
+
+                        <div className="w-full sm:w-1/3">
+                          <label className="text-xs font-medium text-gray-500 mb-1 block">Formato</label>
+                          <Select
+                            value={contentType || '__empty__'}
+                            onValueChange={(value) => setContentType(value === '__empty__' ? '' : value)}
+                          >
+                            <SelectTrigger className="w-full border-gray-200">
+                              <SelectValue placeholder="Formato" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__empty__">Sin definir</SelectItem>
+                              {LINKEDIN_CONTENT_FORMATS.map((formatOption) => (
+                                <SelectItem key={formatOption} value={formatOption}>
+                                  {formatOption}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
                         
-                        <div className="w-full sm:w-2/3 flex gap-3">
+                        <div className="w-full sm:w-1/3 md:flex-1 flex gap-3">
                           <div className="flex-1">
                             <label className="text-xs font-medium text-gray-500 mb-1 block">Fecha</label>
                             <Popover>

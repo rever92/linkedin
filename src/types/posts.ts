@@ -5,6 +5,7 @@ export interface Post {
   _id?: string;
   user_id: string;
   content: string;
+  content_type?: string;
   image_url?: string;
   state: PostState;
   scheduled_datetime?: string | null;

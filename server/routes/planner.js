@@ -196,19 +196,21 @@ async function buildOrUpdatePostFromPlanItem({
     });
   }
 
-  if (!post) {
-    post = await PlannerPost.create({
-      user_id: userId,
-      content: generatedContent,
-      state: scheduledDateTime ? 'planificado' : 'listo',
-      scheduled_datetime: scheduledDateTime ? scheduledDateTime.toISOString() : null,
-      plan_item_id: item._id,
-    });
-  } else {
-    post.content = generatedContent;
-    post.state = scheduledDateTime ? 'planificado' : 'listo';
-    post.scheduled_datetime = scheduledDateTime ? scheduledDateTime.toISOString() : null;
-    post.plan_item_id = item._id;
+    if (!post) {
+      post = await PlannerPost.create({
+        user_id: userId,
+        content: generatedContent,
+        content_type: item.content_type || '',
+        state: scheduledDateTime ? 'planificado' : 'listo',
+        scheduled_datetime: scheduledDateTime ? scheduledDateTime.toISOString() : null,
+        plan_item_id: item._id,
+      });
+    } else {
+      post.content = generatedContent;
+      post.content_type = item.content_type || post.content_type || '';
+      post.state = scheduledDateTime ? 'planificado' : 'listo';
+      post.scheduled_datetime = scheduledDateTime ? scheduledDateTime.toISOString() : null;
+      post.plan_item_id = item._id;
     await post.save();
   }
 
@@ -236,11 +238,12 @@ router.get('/posts', auth, async (req, res, next) => {
 // POST /api/planner/posts - Create a new planner post
 router.post('/posts', auth, async (req, res, next) => {
   try {
-    const { content, state, scheduled_datetime, plan_item_id } = req.body;
+    const { content, content_type, state, scheduled_datetime, plan_item_id } = req.body;
 
     const post = new PlannerPost({
       user_id: req.userId,
       content: content || '',
+      content_type: content_type || '',
       state: state || 'borrador',
       scheduled_datetime: scheduled_datetime || null,
       plan_item_id: plan_item_id || null,
@@ -256,10 +259,11 @@ router.post('/posts', auth, async (req, res, next) => {
 // PUT /api/planner/posts/:id - Update a planner post
 router.put('/posts/:id', auth, async (req, res, next) => {
   try {
-    const { content, state, scheduled_datetime, plan_item_id } = req.body;
+    const { content, content_type, state, scheduled_datetime, plan_item_id } = req.body;
     const updates = {};
 
     if (content !== undefined) updates.content = content;
+    if (content_type !== undefined) updates.content_type = content_type;
     if (state !== undefined) updates.state = state;
     if (scheduled_datetime !== undefined) updates.scheduled_datetime = scheduled_datetime;
     if (plan_item_id !== undefined) updates.plan_item_id = plan_item_id;
