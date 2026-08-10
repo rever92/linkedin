@@ -2,9 +2,15 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+SCRIPT_DIR="${SCRIPT_PATH%/*}"
+if [[ "$SCRIPT_DIR" == "$SCRIPT_PATH" ]]; then
+  SCRIPT_DIR="."
+fi
+SCRIPT_DIR="$(cd "$SCRIPT_DIR" && pwd)"
 APP_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-RESTART_FILE="$APP_ROOT/../tmp/restart.txt"
+RESTART_DIR="$APP_ROOT/../tmp"
+RESTART_FILE="$RESTART_DIR/restart.txt"
 
 cd "$APP_ROOT"
 
@@ -26,7 +32,7 @@ npm ci --include=dev
 echo "[deploy] Generando dist de produccion..."
 npm run build
 
-if [[ -d "$(dirname "$RESTART_FILE")" ]]; then
+if [[ -d "$RESTART_DIR" ]]; then
   touch "$RESTART_FILE"
   echo "[deploy] Reinicio solicitado via $RESTART_FILE"
 else
