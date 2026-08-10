@@ -22,8 +22,7 @@ if [[ ! -f package-lock.json ]]; then
 fi
 
 if [[ ! -f .env.production ]]; then
-  echo "[deploy] Falta .env.production en la raiz del proyecto. Abortando." >&2
-  exit 1
+  echo "[deploy] .env.production no existe; se usarán los valores por defecto del frontend y las variables de Node.js configuradas en Plesk."
 fi
 
 echo "[deploy] Instalando dependencias con devDependencies para el build..."
