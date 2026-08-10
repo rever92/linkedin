@@ -154,6 +154,66 @@ Configurar en **Plesk > Node.js > Environment Variables** (no usar .env en produ
 
 Pulsar **Restart App** en Plesk.
 
+## Despliegue automatico en Plesk (push y listo)
+
+Tu repo ya esta preparado para que Plesk haga el `pull`, reconstruya `dist/` y solicite reinicio tras cada push a GitHub.
+
+### 1. Configurar Git en Plesk
+
+- Ve a **Plesk > Git** y conecta el repositorio remoto.
+- Usa la rama `master`.
+- Activa **Automatic deployment**.
+
+### 2. Crear webhook en GitHub
+
+- En **GitHub > Settings > Webhooks**, crea un webhook nuevo.
+- Pega la URL de webhook que te muestra Plesk para ese repositorio.
+- Evento: **Just the push event**.
+
+### 3. Mantener `.env.production` en el VPS
+
+Crear este archivo en la raiz del proyecto (`/httpdocs/.env.production`) antes del primer despliegue automatico:
+
+```env
+VITE_API_URL=/api
+VITE_GEMINI_API_KEY=tu-clave-gemini
+VITE_STRIPE_PUBLISHABLE_KEY=pk_live_...
+```
+
+Las variables `VITE_*` se incrustan en el build, asi que deben existir antes de ejecutar el deploy.
+
+### 4. Accion de despliegue en Plesk
+
+En **Plesk > Git > Repository Settings > Additional deployment actions**, usa:
+
+```bash
+bash ./scripts/plesk-post-deploy.sh
+```
+
+Ese script hace tres cosas:
+
+- `npm ci --include=dev`
+- `npm run build`
+- `touch ../tmp/restart.txt` si el directorio `tmp` existe
+
+### 5. Variables backend en Plesk
+
+Configura en **Plesk > Node.js > Environment Variables**:
+
+- `MONGODB_URI`
+- `JWT_SECRET`
+- `JWT_EXPIRES_IN`
+- `REFRESH_TOKEN_EXPIRES_IN`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `APP_URL=https://tu-dominio.com`
+- `NODE_ENV=production`
+
+### 6. Primer despliegue
+
+- Haz un deploy manual una vez desde Plesk para validar permisos y rutas.
+- Si todo va bien, a partir de ahi el flujo sera: `git push` -> webhook -> pull automatico -> install -> build -> restart.
+
 ### Fix: SPA routing con Apache (.htaccess)
 
 Plesk usa Apache delante de Node.js. Cuando el usuario navega a `/login` o `/analysis`, Apache busca esos archivos en `dist/` y da 500 porque no existen (es una SPA).

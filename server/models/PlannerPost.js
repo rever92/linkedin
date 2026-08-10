@@ -11,7 +11,16 @@ const plannerPostSchema = new mongoose.Schema({
     type: String,
     default: '',
   },
+  content_type: {
+    type: String,
+    default: '',
+  },
   image_url: String,
+  plan_item_id: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ContentPlanItem',
+    default: null,
+  },
   state: {
     type: String,
     enum: ['borrador', 'listo', 'planificado', 'publicado', 'eliminado'],
