@@ -1,4 +1,7 @@
-export type PostState = 'borrador' | 'listo' | 'planificado';
+export type PostState = 'borrador' | 'listo' | 'planificado' | 'publicado';
+export type LineaEditorial = 'IA para CIOs y C-Level' | 'Casos reales y lecciones' | 'Frameworks y checklists' | 'Opinión sobre tendencias y hype' | 'Marca personal y bastidores';
+export type FuncionEditorial = 'alcance' | 'autoridad' | 'conversacion' | 'flexible';
+export type FormatoPost = 'texto' | 'carrusel' | 'compartido' | 'video' | 'meme' | 'articulo';
 
 export interface Post {
   id?: string;
@@ -8,6 +11,15 @@ export interface Post {
   image_url?: string;
   state: PostState;
   scheduled_datetime?: string;
+  titulo?: string;
+  linea_editorial?: LineaEditorial;
+  funcion_editorial?: FuncionEditorial;
+  formato?: FormatoPost;
+  fuente?: string;
+  punto_de_vista?: string;
+  hipotesis?: string;
+  activo_reutilizable?: string;
+  published_post_url?: string;
   created_at?: string;
   createdAt?: string;
   updated_at?: string;

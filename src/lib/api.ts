@@ -225,6 +225,12 @@ class ApiClient {
     });
   }
 
+  async publishPlannerPost(id: string, published_post_url: string): Promise<any> {
+    return this.request(`/planner/posts/${id}/publish`, {
+      method: 'POST', body: JSON.stringify({ published_post_url }),
+    });
+  }
+
   async savePlannerOptimization(postId: string, data: any): Promise<any> {
     return this.request(`/planner/posts/${postId}/optimizations`, {
       method: 'POST',

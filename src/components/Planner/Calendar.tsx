@@ -120,7 +120,7 @@ export default function Calendar({ posts, onPostSelect, onDateSelect }: Calendar
                       )}
                     >
                       {format(new Date(post.scheduled_datetime!), 'HH:mm')} -{' '}
-                      {post.content.substring(0, 20)}...
+                      {(post.titulo || post.content || 'Idea sin título').substring(0, 24)}
                     </div>
                   ) : i === 2 ? (
                     <div key="more" className="text-xs text-center text-muted-foreground">

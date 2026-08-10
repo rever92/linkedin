@@ -36,8 +36,18 @@ const linkedInPostSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  saves: {
+    type: Number,
+    default: 0,
+  },
   post_type: String,
   category: String,
+  linea_editorial: {
+    type: String,
+    enum: ['IA para CIOs y C-Level', 'Casos reales y lecciones', 'Frameworks y checklists', 'Opinión sobre tendencias y hype', 'Marca personal y bastidores'],
+  },
+  funcion_editorial: { type: String, enum: ['alcance', 'autoridad', 'conversacion', 'flexible'] },
+  formato: { type: String, enum: ['texto', 'carrusel', 'compartido', 'video', 'meme', 'articulo'] },
 }, {
   timestamps: true,
 });

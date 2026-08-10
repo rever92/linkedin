@@ -1,361 +1,47 @@
-import { useState } from 'react';
-import { Post, PostState, getPostDate, getPostId } from '../../types/posts';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../ui/dialog';
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "../ui/hover-card";
-import { format, isToday } from 'date-fns';
-import { es } from 'date-fns/locale';
-import { CalendarClock, Trash2, ArrowUpDown, Star, HelpCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Post, PostState, getPostId } from '../../types/posts';
 import { Button } from '../ui/button';
-import { api } from '../../lib/api';
-import { Switch } from '../ui/switch';
-import { Label } from '../ui/label';
+import { Input } from '../ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Lightbulb, Search, CalendarClock, CheckCircle2, CircleDot, ExternalLink } from 'lucide-react';
 
-type SortOption = 
-  | 'created_asc'
-  | 'created_desc'
-  | 'scheduled_asc'
-  | 'scheduled_desc';
+const states: { value: PostState | 'todos'; label: string; icon: typeof Lightbulb }[] = [
+  { value: 'todos', label: 'Todas', icon: Lightbulb },
+  { value: 'borrador', label: 'Por desarrollar', icon: Lightbulb },
+  { value: 'listo', label: 'Listas', icon: CheckCircle2 },
+  { value: 'planificado', label: 'En calendario', icon: CalendarClock },
+  { value: 'publicado', label: 'Publicadas', icon: CircleDot },
+];
 
-interface PostListProps {
-  posts: Post[];
-  onPostSelect: (post: Post) => void;
-  onPostUpdate: () => void;
-}
+interface Props { posts: Post[]; onPostSelect: (post: Post) => void; }
 
-export default function PostList({ posts, onPostSelect, onPostUpdate }: PostListProps) {
-  const [filter, setFilter] = useState<PostState | 'todos'>('todos');
-  const [sortBy, setSortBy] = useState<SortOption>('created_desc');
-  const [hideOldPosts, setHideOldPosts] = useState(true);
-  const [schedulingPost, setSchedulingPost] = useState<Post | null>(null);
-  const [scheduledDate, setScheduledDate] = useState('');
-  const [scheduledTime, setScheduledTime] = useState('');
-  const [postToDelete, setPostToDelete] = useState<Post | null>(null);
+export default function PostList({ posts, onPostSelect }: Props) {
+  const [state, setState] = useState<PostState | 'todos'>('borrador');
+  const [query, setQuery] = useState('');
+  const [linea, setLinea] = useState('todas');
+  const filtered = useMemo(() => posts.filter(post => {
+    const matchesState = state === 'todos' || post.state === state;
+    const search = `${post.titulo || ''} ${post.content} ${post.fuente || ''} ${post.punto_de_vista || ''}`.toLowerCase();
+    return matchesState && (linea === 'todas' || post.linea_editorial === linea) && search.includes(query.toLowerCase());
+  }), [posts, state, query, linea]);
 
-  const isPostForToday = (post: Post) => {
-    if (!post.scheduled_datetime) return false;
-    return isToday(new Date(post.scheduled_datetime));
-  };
-
-  const filteredPosts = posts.filter(post => {
-    if (filter !== 'todos' && post.state !== filter) return false;
-    
-    if (hideOldPosts && post.scheduled_datetime) {
-      const scheduledDate = new Date(post.scheduled_datetime);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (scheduledDate < today) return false;
-    }
-    
-    return true;
-  });
-
-  const sortedPosts = [...filteredPosts].sort((a, b) => {
-    const aIsToday = isPostForToday(a);
-    const bIsToday = isPostForToday(b);
-    
-    if (aIsToday && !bIsToday) return -1;
-    if (!aIsToday && bIsToday) return 1;
-    
-    switch (sortBy) {
-      case 'created_asc':
-        return getPostDate(a).getTime() - getPostDate(b).getTime();
-      case 'created_desc':
-        return getPostDate(b).getTime() - getPostDate(a).getTime();
-      case 'scheduled_asc':
-        if (!a.scheduled_datetime && !b.scheduled_datetime) {
-          return getPostDate(a).getTime() - getPostDate(b).getTime();
-        }
-        if (!a.scheduled_datetime) return 1;
-        if (!b.scheduled_datetime) return -1;
-        return new Date(a.scheduled_datetime).getTime() - new Date(b.scheduled_datetime).getTime();
-      case 'scheduled_desc':
-        if (!a.scheduled_datetime && !b.scheduled_datetime) {
-          return getPostDate(b).getTime() - getPostDate(a).getTime();
-        }
-        if (!a.scheduled_datetime) return 1;
-        if (!b.scheduled_datetime) return -1;
-        return new Date(b.scheduled_datetime).getTime() - new Date(a.scheduled_datetime).getTime();
-      default:
-        return 0;
-    }
-  });
-
-  const getStateColor = (state: PostState) => {
-    switch (state) {
-      case 'borrador':
-        return 'bg-yellow-50 text-yellow-600 dark:bg-yellow-950 dark:text-yellow-200';
-      case 'listo':
-        return 'bg-blue-50 text-blue-600 dark:bg-blue-950 dark:text-blue-200';
-      case 'planificado':
-        return 'bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-200';
-      default:
-        return 'bg-gray-50 text-gray-600 dark:bg-gray-900 dark:text-gray-200';
-    }
-  };
-
-  const handleSchedule = async (post: Post) => {
-    if (!scheduledDate || !scheduledTime) return;
-
-    try {
-      await api.updatePlannerPost(getPostId(post), {
-        state: 'planificado',
-        scheduled_datetime: new Date(`${scheduledDate}T${scheduledTime}`).toISOString()
-      });
-
-      setSchedulingPost(null);
-      setScheduledDate('');
-      setScheduledTime('');
-      onPostUpdate();
-    } catch (error) {
-      console.error('Error al programar el post:', error);
-    }
-  };
-
-  const handleDelete = async (postId: string) => {
-    try {
-      await api.updatePlannerPost(postId, { state: 'eliminado' });
-
-      onPostUpdate();
-      setPostToDelete(null);
-    } catch (error: any) {
-      console.error('Error al eliminar el post:', error);
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <Dialog open={!!postToDelete} onOpenChange={() => setPostToDelete(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Confirmar eliminación</DialogTitle>
-            <DialogDescription>
-              ¿Estás seguro de que quieres eliminar esta publicación? Esta acción no se puede deshacer.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => setPostToDelete(null)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => postToDelete && handleDelete(getPostId(postToDelete))}
-            >
-              Eliminar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <div className="flex justify-between items-center gap-4">
-        <div className="flex items-center gap-4">
-          <Select
-            value={sortBy}
-            onValueChange={(value) => setSortBy(value as SortOption)}
-          >
-            <SelectTrigger className="w-[250px] bg-white border border-gray-200/50 shadow">
-              <SelectValue placeholder="Ordenar por..." />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="created_desc">Más recientes primero</SelectItem>
-              <SelectItem value="created_asc">Más antiguos primero</SelectItem>
-              <SelectItem value="scheduled_asc">Programados (ascendente)</SelectItem>
-              <SelectItem value="scheduled_desc">Programados (descendente)</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Select
-            value={filter}
-            onValueChange={(value) => setFilter(value as PostState | 'todos')}
-          >
-            <SelectTrigger className="w-[180px] bg-white border border-gray-200/50 shadow">
-              <SelectValue placeholder="Filtrar por estado" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
-              <SelectItem value="borrador">Borradores</SelectItem>
-              <SelectItem value="listo">Listos</SelectItem>
-              <SelectItem value="planificado">Planificados</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Switch
-            id="hide-old-posts"
-            checked={hideOldPosts}
-            onCheckedChange={setHideOldPosts}
-          />
-          <div className="flex items-center gap-1">
-            <Label htmlFor="hide-old-posts" className="text-sm text-muted-foreground cursor-pointer">
-              Ocultar anteriores
-            </Label>
-            <HoverCard>
-              <HoverCardTrigger asChild>
-                <Button variant="ghost" size="icon" className="w-4 h-4 p-0">
-                  <HelpCircle className="w-4 h-4 text-muted-foreground/50" />
-                </Button>
-              </HoverCardTrigger>
-              <HoverCardContent align="start" className="w-80">
-                <p className="text-sm text-muted-foreground">
-                  Si está activo, oculta las publicaciones programadas con fecha anterior a hoy
-                </p>
-              </HoverCardContent>
-            </HoverCard>
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {sortedPosts.map((post) => {
-          const isToday = isPostForToday(post);
-          const postId = getPostId(post);
-          return (
-            <div
-              key={postId}
-              className={`group p-6 bg-white border transition-shadow duration-200 rounded-[25px] ${
-                isToday 
-                  ? 'border-blue-400 shadow-lg ring-2 ring-blue-200' 
-                  : 'border-gray-200/50 shadow-md hover:shadow-lg'
-              }`}
-            >
-              <div className="flex justify-between items-start gap-4">
-                <div 
-                  className="flex-1 cursor-pointer"
-                  onClick={() => onPostSelect(post)}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    {isToday && (
-                      <div className="flex items-center gap-1 text-blue-600 bg-blue-50 px-3 py-1 rounded-full text-xs font-medium">
-                        <Star className="w-3 h-3" />
-                        Post de hoy
-                      </div>
-                    )}
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStateColor(post.state)}`}>
-                      {post.state}
-                    </span>
-                    <span className="text-sm text-muted-foreground">
-                      Creado el {format(getPostDate(post), "d 'de' MMMM, yyyy", { locale: es })}
-                    </span>
-                  </div>
-                  <p className="line-clamp-2 text-foreground text-sm">
-                    {post.content}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {post.state !== 'planificado' && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSchedulingPost(post)}
-                      className="hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-blue-950"
-                    >
-                      <CalendarClock className="w-4 h-4" />
-                    </Button>
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setPostToDelete(post)}
-                    className="hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-              
-              {post.scheduled_datetime && (
-                <p className="mt-3 text-sm text-muted-foreground flex items-center gap-2">
-                  <CalendarClock className="w-4 h-4" />
-                  Programado para: {format(new Date(post.scheduled_datetime), "d 'de' MMMM, yyyy HH:mm", { locale: es })}
-                </p>
-              )}
-
-              {schedulingPost && getPostId(schedulingPost) === postId && (
-                <div className="mt-4 p-6 bg-white border border-gray-200/50 shadow-md rounded-[25px] space-y-4">
-                  <h4 className="text-sm font-medium flex items-center gap-2">
-                    <CalendarClock className="w-4 h-4" />
-                    Programar publicación
-                  </h4>
-                  <div className="flex gap-4">
-                    <div className="flex-1 space-y-2">
-                      <label className="text-sm text-muted-foreground">Fecha</label>
-                      <input
-                        type="date"
-                        value={scheduledDate}
-                        onChange={(e) => setScheduledDate(e.target.value)}
-                        className="w-full px-3 py-1.5 rounded-[25px] border border-gray-200/50 shadow-sm bg-white"
-                      />
-                    </div>
-                    <div className="w-32 space-y-2">
-                      <label className="text-sm text-muted-foreground">Hora</label>
-                      <select
-                        value={scheduledTime}
-                        onChange={(e) => setScheduledTime(e.target.value)}
-                        className="w-full px-3 py-1.5 rounded-[25px] border border-gray-200/50 shadow-sm bg-white"
-                      >
-                        <option value="">Seleccionar</option>
-                        {Array.from({ length: 96 }, (_, i) => {
-                          const hour = Math.floor(i / 4);
-                          const minute = (i % 4) * 15;
-                          const time = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-                          return (
-                            <option key={time} value={time}>
-                              {time}
-                            </option>
-                          );
-                        })}
-                      </select>
-                    </div>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSchedulingPost(null)}
-                    >
-                      Cancelar
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => handleSchedule(post)}
-                      disabled={!scheduledDate || !scheduledTime}
-                    >
-                      Programar
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {sortedPosts.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground">
-            No hay publicaciones que mostrar
-          </div>
-        )}
-      </div>
+  return <section className="space-y-5">
+    <div className="rounded-2xl bg-slate-900 p-2 flex flex-wrap gap-2">
+      {states.map(({ value, label, icon: Icon }) => <button key={value} onClick={() => setState(value)} className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm transition ${state === value ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:bg-white/10 hover:text-white'}`}>
+        <Icon className="h-4 w-4" /> {label} <span className="text-xs opacity-60">{value === 'todos' ? posts.length : posts.filter(p => p.state === value).length}</span>
+      </button>)}
     </div>
-  );
-} 
+    <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="relative flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400" /><Input value={query} onChange={e => setQuery(e.target.value)} className="pl-9" placeholder="Busca una idea, fuente o punto de vista…" /></div>
+      <Select value={linea} onValueChange={setLinea}><SelectTrigger className="sm:w-72"><SelectValue placeholder="Línea editorial" /></SelectTrigger><SelectContent><SelectItem value="todas">Todas las líneas</SelectItem>{Array.from(new Set(posts.map(p => p.linea_editorial).filter(Boolean))).map(value => <SelectItem key={value} value={value!}>{value}</SelectItem>)}</SelectContent></Select>
+    </div>
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {filtered.map(post => <button key={getPostId(post)} onClick={() => onPostSelect(post)} className="group rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-blue-300 hover:shadow-md">
+        <div className="mb-3 flex items-start justify-between gap-3"><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">{post.linea_editorial || 'Sin línea editorial'}</span><span className="text-xs text-slate-400">{post.formato || 'texto'}</span></div>
+        <h3 className="line-clamp-2 text-base font-semibold text-slate-900">{post.titulo || post.content || 'Idea sin título'}</h3>
+        {post.punto_de_vista && <p className="mt-2 line-clamp-2 text-sm text-slate-600">{post.punto_de_vista}</p>}
+        <div className="mt-4 flex items-center justify-between border-t pt-3 text-xs text-slate-500"><span>{post.fuente || 'Añade la fuente'}</span>{post.published_post_url ? <ExternalLink className="h-4 w-4 text-emerald-600" /> : post.scheduled_datetime ? <span className="flex items-center gap-1"><CalendarClock className="h-3.5 w-3.5" /> Programada</span> : null}</div>
+      </button>)}</div>
+    {filtered.length === 0 && <div className="rounded-2xl border border-dashed p-12 text-center text-slate-500"><Lightbulb className="mx-auto mb-3 h-7 w-7" />No hay ideas aquí todavía.</div>}
+  </section>;
+}

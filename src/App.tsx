@@ -15,8 +15,6 @@ import { checkExtensionSync } from './lib/extensionCommunication';
 import LandingPage from './components/LandingPage';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
-import Analysis from './components/Analysis';
-import Pricing from './components/Pricing';
 import PlannerView from './components/Planner/PlannerView';
 import Auth from './components/Auth';
 import PrivacyPolicy from './components/PrivacyPolicy';
@@ -106,29 +104,11 @@ export default function App() {
         path="/login"
         element={
           isAuthenticated ? (
-            <Navigate to="/planner/calendar" replace />
+            <Navigate to="/planner" replace />
           ) : (
             renderLayout(<Auth />)
           )
         }
-      />
-
-      <Route
-        path="/pricing"
-        element={renderLayout(
-          <ProtectedRoute session={session}>
-            <Pricing />
-          </ProtectedRoute>
-        )}
-      />
-
-      <Route
-        path="/analysis/*"
-        element={renderLayout(
-          <ProtectedRoute session={session}>
-            <Analysis />
-          </ProtectedRoute>
-        )}
       />
 
       <Route
@@ -140,13 +120,16 @@ export default function App() {
         )}
       />
 
+      <Route path="/pricing" element={<Navigate to="/planner" replace />} />
+      <Route path="/analysis/*" element={<Navigate to="/planner" replace />} />
+
       <Route
         path="/privacidad"
         element={renderLayout(<PrivacyPolicy />)}
       />
 
       <Route path="/auth" element={<Navigate to="/login" replace />} />
-      <Route path="/dashboard/*" element={<Navigate to="/planner/calendar" replace />} />
+      <Route path="/dashboard/*" element={<Navigate to="/planner" replace />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
