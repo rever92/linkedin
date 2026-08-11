@@ -15,6 +15,7 @@ const metricFields = ['views', 'likes', 'comments', 'shares', 'saves'];
 const editableFields = ['content', 'content_type', 'state', 'scheduled_datetime', 'plan_item_id', 'titulo', 'linea_editorial', 'funcion_editorial', 'formato', 'fuente', 'punto_de_vista', 'hipotesis', 'activo_reutilizable', 'published_post_url', ...metricFields];
 const pickEditable = (body) => Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
 const pickMetrics = (body) => Object.fromEntries(metricFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
+const hasRecordedMetrics = (post) => metricFields.some((metric) => Number(post[metric] || 0) > 0);
 
 const defaultTaxonomies = {
   linea_editorial: ['IA para CIOs y C-Level', 'Casos reales y lecciones', 'Frameworks y checklists', 'Opinión sobre tendencias y hype', 'Marca personal y bastidores'],
@@ -60,18 +61,35 @@ function buildAnalyticsBreakdown(posts, field) {
   const groups = new Map();
   posts.forEach((post) => {
     const value = post[field] || 'Sin clasificar';
-    const current = groups.get(value) || { value, posts: 0, views: 0, likes: 0, comments: 0, shares: 0, saves: 0 };
+    const current = groups.get(value) || { value, posts: 0, posts_with_metrics: 0, views: 0, likes: 0, comments: 0, shares: 0, saves: 0, engagement_rate_sum: 0, engagement_rate_samples: 0 };
     current.posts += 1;
     metricFields.forEach((metric) => { current[metric] += Number(post[metric] || 0); });
+    if (hasRecordedMetrics(post)) {
+      current.posts_with_metrics += 1;
+      const postInteractions = Number(post.likes || 0) + Number(post.comments || 0) + Number(post.shares || 0) + Number(post.saves || 0);
+      if (Number(post.views || 0) > 0) {
+        current.engagement_rate_sum += (postInteractions / Number(post.views)) * 100;
+        current.engagement_rate_samples += 1;
+      }
+    }
     groups.set(value, current);
   });
   return Array.from(groups.values()).map((group) => {
     const interactions = group.likes + group.comments + group.shares + group.saves;
+    const divisor = group.posts_with_metrics;
     return {
-      ...group,
+      value: group.value,
+      posts: group.posts,
+      posts_with_metrics: group.posts_with_metrics,
+      views: group.views,
+      likes: group.likes,
+      comments: group.comments,
+      shares: group.shares,
+      saves: group.saves,
       interactions,
-      average_views: group.posts ? Math.round(group.views / group.posts) : 0,
-      engagement_rate: group.views ? Math.round((interactions / group.views) * 10000) / 100 : 0,
+      average_views: divisor ? Math.round(group.views / divisor) : 0,
+      average_interactions: divisor ? Math.round((interactions / divisor) * 10) / 10 : 0,
+      engagement_rate: group.engagement_rate_samples ? Math.round((group.engagement_rate_sum / group.engagement_rate_samples) * 100) / 100 : 0,
     };
   }).sort((a, b) => b.views - a.views);
 }
@@ -415,14 +433,24 @@ router.get('/analytics', auth, async (req, res, next) => {
       metricFields.forEach((metric) => { acc[metric] += Number(post[metric] || 0); });
       return acc;
     }, { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 });
+    const postsWithMetrics = posts.filter(hasRecordedMetrics);
     const interactions = totals.likes + totals.comments + totals.shares + totals.saves;
+    const engagementRates = postsWithMetrics
+      .filter((post) => Number(post.views || 0) > 0)
+      .map((post) => ((Number(post.likes || 0) + Number(post.comments || 0) + Number(post.shares || 0) + Number(post.saves || 0)) / Number(post.views)) * 100);
+    const metricDivisor = postsWithMetrics.length;
     const summary = {
       posts: posts.length,
-      posts_with_metrics: posts.filter((post) => metricFields.some((metric) => Number(post[metric] || 0) > 0)).length,
+      posts_with_metrics: metricDivisor,
       ...totals,
       interactions,
-      average_views: posts.length ? Math.round(totals.views / posts.length) : 0,
-      engagement_rate: totals.views ? Math.round((interactions / totals.views) * 10000) / 100 : 0,
+      average_views: metricDivisor ? Math.round(totals.views / metricDivisor) : 0,
+      average_interactions: metricDivisor ? Math.round((interactions / metricDivisor) * 10) / 10 : 0,
+      average_likes: metricDivisor ? Math.round((totals.likes / metricDivisor) * 10) / 10 : 0,
+      average_comments: metricDivisor ? Math.round((totals.comments / metricDivisor) * 10) / 10 : 0,
+      average_shares: metricDivisor ? Math.round((totals.shares / metricDivisor) * 10) / 10 : 0,
+      average_saves: metricDivisor ? Math.round((totals.saves / metricDivisor) * 10) / 10 : 0,
+      engagement_rate: engagementRates.length ? Math.round((engagementRates.reduce((sum, rate) => sum + rate, 0) / engagementRates.length) * 100) / 100 : 0,
     };
     res.json({
       summary,

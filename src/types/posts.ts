@@ -20,6 +20,7 @@ export interface ContentTaxonomy {
 export interface AnalyticsBreakdown {
   value: string;
   posts: number;
+  posts_with_metrics: number;
   views: number;
   likes: number;
   comments: number;
@@ -27,6 +28,7 @@ export interface AnalyticsBreakdown {
   saves: number;
   interactions: number;
   average_views: number;
+  average_interactions: number;
   engagement_rate: number;
 }
 
@@ -39,9 +41,14 @@ export interface PlannerAnalytics {
     comments: number;
     shares: number;
     saves: number;
-    interactions: number;
-    average_views: number;
-    engagement_rate: number;
+      interactions: number;
+      average_views: number;
+      average_interactions: number;
+      average_likes: number;
+      average_comments: number;
+      average_shares: number;
+      average_saves: number;
+      engagement_rate: number;
   };
   breakdowns: Record<TaxonomyKind, AnalyticsBreakdown[]>;
   posts: Post[];
