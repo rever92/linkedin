@@ -190,6 +190,10 @@ En **Plesk > Git > Repository Settings > Additional deployment actions**, usa:
 bash ./scripts/plesk-post-deploy.sh
 ```
 
+El script detecta automaticamente el runtime instalado por Plesk Node.js
+Toolkit en `/opt/plesk/node/*/bin`, ya que las acciones Git se ejecutan con un
+`PATH` reducido que puede no incluir `node` y `npm`.
+
 Ese script hace tres cosas:
 
 - `npm ci --include=dev`

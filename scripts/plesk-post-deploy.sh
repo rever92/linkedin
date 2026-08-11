@@ -16,6 +16,36 @@ cd "$APP_ROOT"
 
 echo "[deploy] App root: $APP_ROOT"
 
+# Plesk ejecuta las acciones Git con un PATH mínimo que normalmente no incluye
+# el runtime seleccionado en Node.js Toolkit. Localiza npm y añade su Node al
+# PATH para que el shebang `#!/usr/bin/env node` de npm también funcione.
+NPM_BIN="$(command -v npm || true)"
+SELECTED_NODE_MAJOR=0
+
+if [[ -z "$NPM_BIN" ]]; then
+  for NODE_BIN_DIR in /opt/plesk/node/*/bin; do
+    if [[ ! -x "$NODE_BIN_DIR/node" || ! -x "$NODE_BIN_DIR/npm" ]]; then
+      continue
+    fi
+
+    NODE_MAJOR="$($NODE_BIN_DIR/node -p "process.versions.node.split('.')[0]")"
+    if [[ "$NODE_MAJOR" =~ ^[0-9]+$ ]] && (( NODE_MAJOR >= 18 && NODE_MAJOR > SELECTED_NODE_MAJOR )); then
+      SELECTED_NODE_MAJOR="$NODE_MAJOR"
+      NPM_BIN="$NODE_BIN_DIR/npm"
+    fi
+  done
+fi
+
+if [[ -z "$NPM_BIN" ]]; then
+  echo "[deploy] npm no está disponible. Comprueba que Node.js Toolkit está habilitado para el dominio." >&2
+  exit 1
+fi
+
+NODE_BIN_DIR="${NPM_BIN%/*}"
+export PATH="$NODE_BIN_DIR:$PATH"
+echo "[deploy] Node: $(node --version)"
+echo "[deploy] npm: $NPM_BIN"
+
 if [[ ! -f package-lock.json ]]; then
   echo "[deploy] package-lock.json no encontrado. Abortando." >&2
   exit 1
@@ -26,10 +56,10 @@ if [[ ! -f .env.production ]]; then
 fi
 
 echo "[deploy] Instalando dependencias con devDependencies para el build..."
-npm ci --include=dev
+"$NPM_BIN" ci --include=dev
 
 echo "[deploy] Generando dist de produccion..."
-npm run build
+"$NPM_BIN" run build
 
 if [[ -d "$RESTART_DIR" ]]; then
   touch "$RESTART_FILE"
