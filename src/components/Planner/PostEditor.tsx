@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ContentTaxonomy, Post, PostState, getPostId } from '../../types/posts';
+import { ContentTaxonomy, PlannerMetricField, Post, PostState, getPostId, getPostMetric } from '../../types/posts';
 import { api } from '../../lib/api';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
@@ -10,7 +10,6 @@ import { BarChart3, Bookmark, CalendarClock, Eye, FileText, Heart, Lightbulb, Li
 import TaxonomySelect from './TaxonomySelect';
 
 const controlClass = 'border-slate-300 bg-white shadow-sm transition-colors hover:border-slate-400 focus-visible:border-blue-500 focus-visible:ring-blue-500/20 focus-visible:ring-offset-0';
-type MetricFieldName = 'views' | 'likes' | 'comments' | 'shares' | 'saves';
 
 interface Props {
   post?: Post | null;
@@ -30,22 +29,36 @@ export default function PostEditor({ post, initialDate, onClose, onSave, taxonom
 
   useEffect(() => {
     const scheduled = post?.scheduled_datetime ? new Date(post.scheduled_datetime) : null;
-    setForm({ ...post, state: post?.state || (initialDate ? 'planificado' : 'borrador') });
+    setForm({
+      ...post,
+      state: post?.state || (initialDate ? 'planificado' : 'borrador'),
+      ...(post && {
+        impresiones: getPostMetric(post, 'impresiones'),
+        reacciones: getPostMetric(post, 'reacciones'),
+        comentarios: getPostMetric(post, 'comentarios'),
+        compartidos: getPostMetric(post, 'compartidos'),
+        guardados: getPostMetric(post, 'guardados'),
+      }),
+    });
     setDate(scheduled ? scheduled.toISOString().slice(0, 10) : initialDate || '');
     setTime(scheduled ? scheduled.toTimeString().slice(0, 5) : '09:00');
   }, [post, initialDate]);
 
   const set = (field: keyof Post, value: string | number) => setForm((current) => ({ ...current, [field]: value }));
-  const setMetric = (field: MetricFieldName, value: string) => {
+  const setMetric = (field: PlannerMetricField, value: string) => {
+    if (value === '') {
+      setForm((current) => ({ ...current, [field]: null }));
+      return;
+    }
     const parsed = Number.parseInt(value, 10);
-    setForm((current) => ({ ...current, [field]: Number.isFinite(parsed) ? Math.max(0, parsed) : 0 }));
+    setForm((current) => ({ ...current, [field]: Number.isFinite(parsed) ? Math.max(0, parsed) : null }));
   };
   const state = (form.state || 'borrador') as PostState;
   const isScheduled = state === 'planificado';
   const isPublished = state === 'publicado';
   const keepsPublicationDate = isScheduled || isPublished;
-  const interactions = (form.likes || 0) + (form.comments || 0) + (form.shares || 0) + (form.saves || 0);
-  const engagementRate = form.views ? (interactions / form.views) * 100 : 0;
+  const interactions = getPostMetric(form, 'reacciones') + getPostMetric(form, 'comentarios') + getPostMetric(form, 'compartidos') + getPostMetric(form, 'guardados');
+  const engagementRate = getPostMetric(form, 'impresiones') ? (interactions / getPostMetric(form, 'impresiones')) * 100 : 0;
 
   const save = async () => {
     setSaving(true);
@@ -182,7 +195,7 @@ export default function PostEditor({ post, initialDate, onClose, onSave, taxonom
 
               {isPublished && (
                 <>
-                  <Field label="URL del post publicado" hint="Opcional. Si coincide con un post importado, sus métricas se sincronizarán automáticamente.">
+                  <Field label="URL del post publicado" hint="Opcional y únicamente informativa. Las métricas se guardan siempre en este item del planner.">
                     <div className="relative">
                       <LinkIcon className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-slate-400" />
                       <Input className={`${controlClass} pl-9`} value={form.published_post_url || ''} onChange={(e) => set('published_post_url', e.target.value)} placeholder="https://www.linkedin.com/posts/…" />
@@ -193,7 +206,7 @@ export default function PostEditor({ post, initialDate, onClose, onSave, taxonom
                     <div className="mb-4 flex flex-col gap-2 border-b border-emerald-100 pb-3 sm:flex-row sm:items-end sm:justify-between">
                       <div>
                         <h4 className="flex items-center gap-2 font-semibold text-slate-900"><BarChart3 className="h-4 w-4 text-emerald-600" />Analytics</h4>
-                        <p className="mt-1 text-xs text-slate-500">Puedes introducirlas manualmente, mediante MCP o importando los datos de LinkedIn.</p>
+                        <p className="mt-1 text-xs text-slate-500">Se guardan directamente en el item del planner identificado por su _id.</p>
                       </div>
                       <div className="rounded-lg bg-emerald-50 px-3 py-2 text-right">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Engagement</p>
@@ -201,13 +214,13 @@ export default function PostEditor({ post, initialDate, onClose, onSave, taxonom
                       </div>
                     </div>
                     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                      <MetricInput icon={<Eye />} label="Visualizaciones" value={form.views || 0} onChange={(value) => setMetric('views', value)} />
-                      <MetricInput icon={<Heart />} label="Reacciones" value={form.likes || 0} onChange={(value) => setMetric('likes', value)} />
-                      <MetricInput icon={<MessageCircle />} label="Comentarios" value={form.comments || 0} onChange={(value) => setMetric('comments', value)} />
-                      <MetricInput icon={<Repeat2 />} label="Compartidos" value={form.shares || 0} onChange={(value) => setMetric('shares', value)} />
-                      <MetricInput icon={<Bookmark />} label="Guardados" value={form.saves || 0} onChange={(value) => setMetric('saves', value)} />
+                      <MetricInput icon={<Eye />} label="Impresiones" value={form.impresiones} onChange={(value) => setMetric('impresiones', value)} />
+                      <MetricInput icon={<Heart />} label="Reacciones" value={form.reacciones} onChange={(value) => setMetric('reacciones', value)} />
+                      <MetricInput icon={<MessageCircle />} label="Comentarios" value={form.comentarios} onChange={(value) => setMetric('comentarios', value)} />
+                      <MetricInput icon={<Repeat2 />} label="Compartidos" value={form.compartidos} onChange={(value) => setMetric('compartidos', value)} />
+                      <MetricInput icon={<Bookmark />} label="Guardados" value={form.guardados} onChange={(value) => setMetric('guardados', value)} />
                     </div>
-                    {form.metrics_updated_at && <p className="mt-3 text-right text-[11px] text-slate-400">Actualizadas {new Date(form.metrics_updated_at).toLocaleString('es-ES')}</p>}
+                    {(form.fecha_medicion || form.metrics_updated_at) && <p className="mt-3 text-right text-[11px] text-slate-400">Medición del {new Date(form.fecha_medicion || form.metrics_updated_at || '').toLocaleString('es-ES')}</p>}
                   </div>
                 </>
               )}
@@ -245,14 +258,14 @@ export default function PostEditor({ post, initialDate, onClose, onSave, taxonom
   );
 }
 
-function MetricInput({ icon, label, value, onChange }: { icon: React.ReactNode; label: string; value: number; onChange: (value: string) => void }) {
+function MetricInput({ icon, label, value, onChange }: { icon: React.ReactNode; label: string; value?: number | null; onChange: (value: string) => void }) {
   return (
     <label className="block">
       <span className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-slate-600">
         <span className="[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:text-emerald-600">{icon}</span>
         {label}
       </span>
-      <Input className={`${controlClass} tabular-nums`} type="number" min="0" step="1" inputMode="numeric" value={value} onChange={(event) => onChange(event.target.value)} />
+      <Input className={`${controlClass} tabular-nums`} type="number" min="0" step="1" inputMode="numeric" value={value ?? ''} placeholder="Sin dato" onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }

@@ -39,6 +39,14 @@ const plannerPostSchema = new mongoose.Schema({
   hipotesis: { type: String, trim: true },
   activo_reutilizable: { type: String, trim: true },
   published_post_url: { type: String, trim: true },
+  // Canonical planner metrics. The legacy English fields below remain readable
+  // so existing records keep working, but all new metric writes use these.
+  impresiones: { type: Number, default: null, min: 0 },
+  reacciones: { type: Number, default: null, min: 0 },
+  comentarios: { type: Number, default: null, min: 0 },
+  compartidos: { type: Number, default: null, min: 0 },
+  guardados: { type: Number, default: null, min: 0 },
+  fecha_medicion: { type: Date, default: null },
   views: { type: Number, default: 0, min: 0 },
   likes: { type: Number, default: 0, min: 0 },
   comments: { type: Number, default: 0, min: 0 },

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ContentPlanItem, Post, getPostId } from '../../types/posts';
+import { ContentPlanItem, Post, getPostId, getPostMetric } from '../../types/posts';
 import {
   addMonths,
   eachDayOfInterval,
@@ -206,9 +206,9 @@ export default function Calendar({
                         <div className="truncate opacity-80">
                           {entry.subtitle}
                         </div>
-                        {entry.type === 'post' && entry.post.state === 'publicado' && Boolean(entry.post.views || entry.post.likes || entry.post.comments || entry.post.shares || entry.post.saves) && (
+                        {entry.type === 'post' && entry.post.state === 'publicado' && Boolean(getPostMetric(entry.post, 'impresiones') || getPostMetric(entry.post, 'reacciones') || getPostMetric(entry.post, 'comentarios') || getPostMetric(entry.post, 'compartidos') || getPostMetric(entry.post, 'guardados')) && (
                           <div className="mt-1.5 truncate border-t border-emerald-200 pt-1.5 text-[10px] font-medium text-emerald-800">
-                            {(entry.post.views || 0).toLocaleString('es-ES')} vistas · {((entry.post.likes || 0) + (entry.post.comments || 0) + (entry.post.shares || 0) + (entry.post.saves || 0)).toLocaleString('es-ES')} interacciones
+                            {getPostMetric(entry.post, 'impresiones').toLocaleString('es-ES')} impresiones · {(getPostMetric(entry.post, 'reacciones') + getPostMetric(entry.post, 'comentarios') + getPostMetric(entry.post, 'compartidos') + getPostMetric(entry.post, 'guardados')).toLocaleString('es-ES')} interacciones
                           </div>
                         )}
                         {entry.type === 'post' && entry.post.state === 'planificado' && !isAfter(startOfDay(entry.date), today) && onPostPublish && (

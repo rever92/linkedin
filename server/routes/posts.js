@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import auth from '../middleware/auth.js';
 import LinkedInPost from '../models/LinkedInPost.js';
-import PlannerPost from '../models/PlannerPost.js';
 
 const router = Router();
 
@@ -50,40 +49,6 @@ router.post('/upsert', auth, async (req, res, next) => {
     }));
 
     await LinkedInPost.bulkWrite(operations);
-
-    const importedMetrics = posts
-      .filter((post) => post.url)
-      .map((post) => ({
-        updateOne: {
-          filter: { user_id: req.userId, published_post_url: post.url },
-          update: {
-            $set: {
-              views: post.views || 0,
-              likes: post.likes || 0,
-              comments: post.comments || 0,
-              shares: post.shares || 0,
-              saves: post.saves || 0,
-              metrics_updated_at: new Date(),
-            },
-          },
-        },
-      }));
-    if (importedMetrics.length) await PlannerPost.bulkWrite(importedMetrics);
-
-    // An import may arrive after the idea was marked as published. In that
-    // case, carry the idea taxonomy forward automatically to close the loop.
-    const publishedIdeas = await PlannerPost.find({
-      user_id: req.userId,
-      published_post_url: { $in: posts.map(post => post.url) },
-    }).select('published_post_url linea_editorial funcion_editorial formato');
-    if (publishedIdeas.length) {
-      await LinkedInPost.bulkWrite(publishedIdeas.map(idea => ({
-        updateOne: {
-          filter: { url: idea.published_post_url, user_id: req.userId },
-          update: { $set: { linea_editorial: idea.linea_editorial, funcion_editorial: idea.funcion_editorial, formato: idea.formato } },
-        },
-      })));
-    }
 
     const updatedPosts = await LinkedInPost.find({ user_id: req.userId })
       .sort({ date: -1 });

@@ -3,6 +3,7 @@ export type LineaEditorial = string;
 export type FuncionEditorial = string;
 export type FormatoPost = string;
 export type TaxonomyKind = 'linea_editorial' | 'funcion_editorial' | 'formato';
+export type PlannerMetricField = 'impresiones' | 'reacciones' | 'comentarios' | 'compartidos' | 'guardados';
 
 export interface ContentTaxonomy {
   id?: string;
@@ -26,6 +27,11 @@ export interface AnalyticsBreakdown {
   comments: number;
   shares: number;
   saves: number;
+  impresiones?: number;
+  reacciones?: number;
+  comentarios?: number;
+  compartidos?: number;
+  guardados?: number;
   interactions: number;
   average_views: number;
   average_interactions: number;
@@ -41,14 +47,19 @@ export interface PlannerAnalytics {
     comments: number;
     shares: number;
     saves: number;
-      interactions: number;
-      average_views: number;
-      average_interactions: number;
-      average_likes: number;
-      average_comments: number;
-      average_shares: number;
-      average_saves: number;
-      engagement_rate: number;
+    impresiones?: number;
+    reacciones?: number;
+    comentarios?: number;
+    compartidos?: number;
+    guardados?: number;
+    interactions: number;
+    average_views: number;
+    average_interactions: number;
+    average_likes: number;
+    average_comments: number;
+    average_shares: number;
+    average_saves: number;
+    engagement_rate: number;
   };
   breakdowns: Record<TaxonomyKind, AnalyticsBreakdown[]>;
   posts: Post[];
@@ -73,6 +84,13 @@ export interface Post {
   hipotesis?: string;
   activo_reutilizable?: string;
   published_post_url?: string;
+  impresiones?: number | null;
+  reacciones?: number | null;
+  comentarios?: number | null;
+  compartidos?: number | null;
+  guardados?: number | null;
+  fecha_medicion?: string | null;
+  // Legacy aliases kept for records created before planner metrics became canonical.
   views?: number;
   likes?: number;
   comments?: number;
@@ -194,6 +212,18 @@ export function getPostDate(post: Post, field: 'created' | 'updated' = 'created'
 
 export function getPostId<T extends { _id?: string; id?: string }>(post: T): string {
   return post._id || post.id || '';
+}
+
+const legacyMetricFields: Record<PlannerMetricField, keyof Post> = {
+  impresiones: 'views',
+  reacciones: 'likes',
+  comentarios: 'comments',
+  compartidos: 'shares',
+  guardados: 'saves',
+};
+
+export function getPostMetric(post: Partial<Post>, field: PlannerMetricField): number {
+  return Number(post[field] ?? post[legacyMetricFields[field]] ?? 0);
 }
 
 export interface AIGeneratedImage {

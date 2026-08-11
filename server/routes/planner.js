@@ -11,11 +11,33 @@ import ContentTaxonomy, { TAXONOMY_KINDS } from '../models/ContentTaxonomy.js';
 import { generateContentPlan, generatePlannedPostContent, optimizePlannedPost } from '../services/geminiPlannerService.js';
 
 const router = Router();
-const metricFields = ['views', 'likes', 'comments', 'shares', 'saves'];
-const editableFields = ['content', 'content_type', 'state', 'scheduled_datetime', 'plan_item_id', 'titulo', 'linea_editorial', 'funcion_editorial', 'formato', 'fuente', 'punto_de_vista', 'hipotesis', 'activo_reutilizable', 'published_post_url', ...metricFields];
+const metricDefinitions = [
+  { field: 'impresiones', legacy: 'views' },
+  { field: 'reacciones', legacy: 'likes' },
+  { field: 'comentarios', legacy: 'comments' },
+  { field: 'compartidos', legacy: 'shares' },
+  { field: 'guardados', legacy: 'saves' },
+];
+const metricFields = metricDefinitions.map(({ field }) => field);
+const editableFields = ['content', 'content_type', 'state', 'scheduled_datetime', 'plan_item_id', 'titulo', 'linea_editorial', 'funcion_editorial', 'formato', 'fuente', 'punto_de_vista', 'hipotesis', 'activo_reutilizable', 'published_post_url'];
 const pickEditable = (body) => Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
-const pickMetrics = (body) => Object.fromEntries(metricFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
-const hasRecordedMetrics = (post) => metricFields.some((metric) => Number(post[metric] || 0) > 0);
+const metricValue = (post, field) => {
+  const definition = metricDefinitions.find((item) => item.field === field);
+  return Number(post[field] ?? post[definition.legacy] ?? 0);
+};
+const pickMetrics = (body) => Object.fromEntries(metricDefinitions.flatMap(({ field, legacy }) => {
+  if (body[field] !== undefined) return [[field, body[field]]];
+  if (body[legacy] !== undefined) return [[field, body[legacy]]];
+  return [];
+}));
+const hasRecordedMetrics = (post) => metricFields.some((metric) => metricValue(post, metric) > 0);
+const normalizeSearchText = (value) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLocaleLowerCase('es-ES')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim()
+  .replace(/\s+/g, ' ');
 
 const defaultTaxonomies = {
   linea_editorial: ['IA para CIOs y C-Level', 'Casos reales y lecciones', 'Frameworks y checklists', 'Opinión sobre tendencias y hype', 'Marca personal y bastidores'],
@@ -61,33 +83,38 @@ function buildAnalyticsBreakdown(posts, field) {
   const groups = new Map();
   posts.forEach((post) => {
     const value = post[field] || 'Sin clasificar';
-    const current = groups.get(value) || { value, posts: 0, posts_with_metrics: 0, views: 0, likes: 0, comments: 0, shares: 0, saves: 0, engagement_rate_sum: 0, engagement_rate_samples: 0 };
+    const current = groups.get(value) || { value, posts: 0, posts_with_metrics: 0, impresiones: 0, reacciones: 0, comentarios: 0, compartidos: 0, guardados: 0, engagement_rate_sum: 0, engagement_rate_samples: 0 };
     current.posts += 1;
-    metricFields.forEach((metric) => { current[metric] += Number(post[metric] || 0); });
+    metricFields.forEach((metric) => { current[metric] += metricValue(post, metric); });
     if (hasRecordedMetrics(post)) {
       current.posts_with_metrics += 1;
-      const postInteractions = Number(post.likes || 0) + Number(post.comments || 0) + Number(post.shares || 0) + Number(post.saves || 0);
-      if (Number(post.views || 0) > 0) {
-        current.engagement_rate_sum += (postInteractions / Number(post.views)) * 100;
+      const postInteractions = metricValue(post, 'reacciones') + metricValue(post, 'comentarios') + metricValue(post, 'compartidos') + metricValue(post, 'guardados');
+      if (metricValue(post, 'impresiones') > 0) {
+        current.engagement_rate_sum += (postInteractions / metricValue(post, 'impresiones')) * 100;
         current.engagement_rate_samples += 1;
       }
     }
     groups.set(value, current);
   });
   return Array.from(groups.values()).map((group) => {
-    const interactions = group.likes + group.comments + group.shares + group.saves;
+    const interactions = group.reacciones + group.comentarios + group.compartidos + group.guardados;
     const divisor = group.posts_with_metrics;
     return {
       value: group.value,
       posts: group.posts,
       posts_with_metrics: group.posts_with_metrics,
-      views: group.views,
-      likes: group.likes,
-      comments: group.comments,
-      shares: group.shares,
-      saves: group.saves,
+      views: group.impresiones,
+      likes: group.reacciones,
+      comments: group.comentarios,
+      shares: group.compartidos,
+      saves: group.guardados,
+      impresiones: group.impresiones,
+      reacciones: group.reacciones,
+      comentarios: group.comentarios,
+      compartidos: group.compartidos,
+      guardados: group.guardados,
       interactions,
-      average_views: divisor ? Math.round(group.views / divisor) : 0,
+      average_views: divisor ? Math.round(group.impresiones / divisor) : 0,
       average_interactions: divisor ? Math.round((interactions / divisor) * 10) / 10 : 0,
       engagement_rate: group.engagement_rate_samples ? Math.round((group.engagement_rate_sum / group.engagement_rate_samples) * 100) / 100 : 0,
     };
@@ -321,6 +348,39 @@ router.get('/posts', auth, async (req, res, next) => {
   }
 });
 
+// GET /api/planner/posts/find-by-text - Resolve a screenshot excerpt to a planner _id.
+router.get('/posts/find-by-text', auth, async (req, res, next) => {
+  try {
+    const text = normalizeSearchText(req.query.text);
+    if (text.length < 3) return res.status(400).json({ error: 'Indica al menos 3 caracteres de texto' });
+
+    const candidates = await PlannerPost.find({ user_id: req.userId, state: { $ne: 'eliminado' } })
+      .select('_id titulo content state')
+      .sort({ updatedAt: -1 });
+    const matches = candidates.flatMap((post) => {
+      const content = normalizeSearchText(post.content);
+      const position = content.indexOf(text);
+      if (position < 0) return [];
+      const matchType = position === 0 ? 'empieza_por' : 'contiene';
+      const coverage = Math.min(1, text.length / Math.max(content.length, 1));
+      const stateBoost = post.state === 'publicado' ? 0.08 : 0;
+      const score = Math.round(((position === 0 ? 1 : 0.72) + coverage * 0.2 + stateBoost - Math.min(position, 500) / 5000) * 1000) / 1000;
+      return [{
+        _id: post._id,
+        titulo: post.titulo || '',
+        content_preview: String(post.content || '').split('\n').slice(0, 3).join('\n').slice(0, 500),
+        state: post.state,
+        match_type: matchType,
+        similarity_score: score,
+      }];
+    }).sort((a, b) => b.similarity_score - a.similarity_score);
+
+    res.json(matches.slice(0, 20));
+  } catch (error) {
+    next(error);
+  }
+});
+
 // GET /api/planner/taxonomies - List the user's content taxonomies.
 router.get('/taxonomies', auth, async (req, res, next) => {
   try {
@@ -429,19 +489,27 @@ router.get('/analytics', auth, async (req, res, next) => {
       if (req.query[kind]) filter[kind] = req.query[kind];
     });
     const posts = await PlannerPost.find(filter).sort({ scheduled_datetime: -1, createdAt: -1 });
-    const totals = posts.reduce((acc, post) => {
-      metricFields.forEach((metric) => { acc[metric] += Number(post[metric] || 0); });
+    const canonicalTotals = posts.reduce((acc, post) => {
+      metricFields.forEach((metric) => { acc[metric] += metricValue(post, metric); });
       return acc;
-    }, { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 });
+    }, { impresiones: 0, reacciones: 0, comentarios: 0, compartidos: 0, guardados: 0 });
+    const totals = {
+      views: canonicalTotals.impresiones,
+      likes: canonicalTotals.reacciones,
+      comments: canonicalTotals.comentarios,
+      shares: canonicalTotals.compartidos,
+      saves: canonicalTotals.guardados,
+    };
     const postsWithMetrics = posts.filter(hasRecordedMetrics);
     const interactions = totals.likes + totals.comments + totals.shares + totals.saves;
     const engagementRates = postsWithMetrics
-      .filter((post) => Number(post.views || 0) > 0)
-      .map((post) => ((Number(post.likes || 0) + Number(post.comments || 0) + Number(post.shares || 0) + Number(post.saves || 0)) / Number(post.views)) * 100);
+      .filter((post) => metricValue(post, 'impresiones') > 0)
+      .map((post) => ((metricValue(post, 'reacciones') + metricValue(post, 'comentarios') + metricValue(post, 'compartidos') + metricValue(post, 'guardados')) / metricValue(post, 'impresiones')) * 100);
     const metricDivisor = postsWithMetrics.length;
     const summary = {
       posts: posts.length,
       posts_with_metrics: metricDivisor,
+      ...canonicalTotals,
       ...totals,
       interactions,
       average_views: metricDivisor ? Math.round(totals.views / metricDivisor) : 0,
@@ -471,7 +539,8 @@ router.post('/posts', auth, async (req, res, next) => {
   try {
     const { content, content_type, state = 'borrador', scheduled_datetime, plan_item_id, ...metadata } = pickEditable(req.body);
     const metrics = pickMetrics(req.body);
-    if (Object.keys(metrics).length) metadata.metrics_updated_at = new Date();
+    const measurementDate = req.body.fecha_medicion ?? req.body.metrics_updated_at;
+    if (Object.keys(metrics).length) metadata.fecha_medicion = measurementDate ? new Date(measurementDate) : new Date();
 
     const post = new PlannerPost({
       user_id: req.userId,
@@ -481,15 +550,10 @@ router.post('/posts', auth, async (req, res, next) => {
       scheduled_datetime: ['planificado', 'publicado'].includes(state) ? (scheduled_datetime || null) : null,
       plan_item_id: plan_item_id || null,
       ...metadata,
+      ...metrics,
     });
 
     await post.save();
-    if (post.state === 'publicado' && post.published_post_url) {
-      await LinkedInPost.findOneAndUpdate(
-        { url: post.published_post_url, user_id: req.userId },
-        { $set: { linea_editorial: post.linea_editorial, funcion_editorial: post.funcion_editorial, formato: post.formato, ...metrics } }
-      );
-    }
     res.status(201).json(post);
   } catch (error) {
     next(error);
@@ -502,7 +566,12 @@ router.put('/posts/:id', auth, async (req, res, next) => {
     const { content, content_type, state, scheduled_datetime, plan_item_id, ...metadata } = pickEditable(req.body);
     const updates = { ...metadata };
     const metrics = pickMetrics(req.body);
-    if (Object.keys(metrics).length) updates.metrics_updated_at = new Date();
+    const measurementDate = req.body.fecha_medicion ?? req.body.metrics_updated_at;
+    if (Object.keys(metrics).length) {
+      Object.assign(updates, metrics);
+      metricDefinitions.forEach(({ field, legacy }) => { if (metrics[field] === null) updates[legacy] = null; });
+      updates.fecha_medicion = measurementDate ? new Date(measurementDate) : new Date();
+    }
 
     if (content !== undefined) updates.content = content;
     if (content_type !== undefined) updates.content_type = content_type;
@@ -521,13 +590,6 @@ router.put('/posts/:id', auth, async (req, res, next) => {
       return res.status(404).json({ error: 'Post no encontrado' });
     }
 
-    if (post.state === 'publicado' && post.published_post_url) {
-      await LinkedInPost.findOneAndUpdate(
-        { url: post.published_post_url, user_id: req.userId },
-        { $set: { linea_editorial: post.linea_editorial, funcion_editorial: post.funcion_editorial, formato: post.formato, ...metrics } }
-      );
-    }
-
     res.json(post);
   } catch (error) {
     next(error);
@@ -540,24 +602,55 @@ router.post('/posts/:id/publish', auth, async (req, res, next) => {
     const { published_post_url, scheduled_datetime } = req.body;
     const metrics = pickMetrics(req.body);
     const updates = { state: 'publicado', ...metrics };
+    metricDefinitions.forEach(({ field, legacy }) => { if (metrics[field] === null) updates[legacy] = null; });
     if (published_post_url !== undefined) updates.published_post_url = published_post_url;
     if (scheduled_datetime !== undefined) updates.scheduled_datetime = scheduled_datetime;
-    if (Object.keys(metrics).length) updates.metrics_updated_at = new Date();
+    if (Object.keys(metrics).length) updates.fecha_medicion = req.body.fecha_medicion ? new Date(req.body.fecha_medicion) : new Date();
     const post = await PlannerPost.findOneAndUpdate(
       { _id: req.params.id, user_id: req.userId },
       updates,
       { new: true, runValidators: true }
     );
     if (!post) return res.status(404).json({ error: 'Post no encontrado' });
-    if (post.published_post_url) {
-      await LinkedInPost.findOneAndUpdate(
-        { url: post.published_post_url, user_id: req.userId },
-        { $set: { linea_editorial: post.linea_editorial, funcion_editorial: post.funcion_editorial, formato: post.formato, ...metrics } }
-      );
-    }
-
     res.json(post);
   } catch (error) { next(error); }
+});
+
+// PUT /api/planner/posts/:id/metrics - Metrics are always keyed by planner _id.
+router.put('/posts/:id/metrics', auth, async (req, res, next) => {
+  try {
+    if (!PlannerPost.base.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: 'El id del planner no es válido' });
+    }
+    const metrics = pickMetrics(req.body);
+    if (!Object.keys(metrics).length && req.body.fecha_medicion === undefined) {
+      return res.status(400).json({ error: 'Incluye al menos una métrica o fecha_medicion' });
+    }
+    for (const [field, value] of Object.entries(metrics)) {
+      if (value !== null && (!Number.isFinite(Number(value)) || Number(value) < 0)) {
+        return res.status(400).json({ error: `${field} debe ser un número positivo o null` });
+      }
+      metrics[field] = value === null ? null : Number(value);
+    }
+    const fechaMedicion = req.body.fecha_medicion === null
+      ? null
+      : req.body.fecha_medicion ? new Date(req.body.fecha_medicion) : new Date();
+    if (fechaMedicion instanceof Date && Number.isNaN(fechaMedicion.getTime())) {
+      return res.status(400).json({ error: 'fecha_medicion no es una fecha válida' });
+    }
+    const updates = { ...metrics, fecha_medicion: fechaMedicion };
+    // Clearing canonical metrics must also clear legacy fallbacks.
+    metricDefinitions.forEach(({ field, legacy }) => { if (metrics[field] === null) updates[legacy] = null; });
+    const post = await PlannerPost.findOneAndUpdate(
+      { _id: req.params.id, user_id: req.userId },
+      { $set: updates },
+      { new: true, runValidators: true }
+    );
+    if (!post) return res.status(404).json({ error: 'Post del planner no encontrado' });
+    res.json(post);
+  } catch (error) {
+    next(error);
+  }
 });
 
 // POST /api/planner/posts/:id/optimizations - Save post optimization
