@@ -9,12 +9,14 @@ import {
   isSameDay,
   isSameMonth,
   isToday,
+  isAfter,
+  startOfDay,
   startOfMonth,
   startOfWeek,
   subMonths,
 } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, FileText, Plus } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, ChevronRight, FileText, Loader2, Plus } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 
@@ -22,6 +24,7 @@ interface CalendarProps {
   posts: Post[];
   planItems?: ContentPlanItem[];
   onPostSelect: (post: Post) => void;
+  onPostPublish?: (post: Post) => Promise<void>;
   onPlanItemSelect?: (item: ContentPlanItem) => void;
   onDateSelect?: (date: Date) => void;
 }
@@ -34,10 +37,14 @@ export default function Calendar({
   posts,
   planItems = [],
   onPostSelect,
+  onPostPublish,
   onPlanItemSelect,
   onDateSelect,
 }: CalendarProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
+  const [publishingId, setPublishingId] = useState<string | null>(null);
+  const [publishError, setPublishError] = useState('');
+  const today = startOfDay(new Date());
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
@@ -53,7 +60,9 @@ export default function Calendar({
         id: getPostId(post),
         date: new Date(post.scheduled_datetime as string),
         label: post.titulo || post.content?.slice(0, 32) || 'Publicación',
-        subtitle: post.scheduled_datetime ? format(new Date(post.scheduled_datetime), 'HH:mm') : '',
+        subtitle: post.scheduled_datetime
+          ? `${post.state === 'publicado' ? 'Publicado' : 'Planificado'} · ${format(new Date(post.scheduled_datetime), 'HH:mm')}`
+          : '',
         post,
       }));
 
@@ -82,6 +91,20 @@ export default function Calendar({
     if (onDateSelect && isSameMonth(day, currentDate)) onDateSelect(day);
   };
 
+  const handleQuickPublish = async (post: Post) => {
+    if (!onPostPublish) return;
+    const id = getPostId(post);
+    setPublishingId(id);
+    setPublishError('');
+    try {
+      await onPostPublish(post);
+    } catch (error: any) {
+      setPublishError(error.message || 'No se pudo marcar la publicación como publicada.');
+    } finally {
+      setPublishingId(null);
+    }
+  };
+
   return (
     <div className="bg-white border border-gray-200/50 shadow-md hover:shadow-lg transition-shadow duration-200 rounded-[25px]">
       <div className="flex items-center justify-between p-6 border-b border-gray-200/50">
@@ -101,6 +124,12 @@ export default function Calendar({
       <div className="p-3 text-sm text-center text-muted-foreground bg-blue-50 border-b border-blue-100">
         Haz clic en una fecha vacía para crear una nueva publicación para ese día
       </div>
+
+      {publishError && (
+        <div role="alert" className="border-b border-red-200 bg-red-50 px-4 py-2 text-center text-sm text-red-700">
+          {publishError}
+        </div>
+      )}
 
       <div className="grid grid-cols-7 text-center text-sm border-b border-border">
         {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => (
@@ -163,9 +192,11 @@ export default function Calendar({
                         }}
                         className={cn(
                           'text-xs p-2 rounded-[15px] cursor-pointer transition-colors border',
-                          entry.type === 'post'
-                            ? 'bg-primary/10 hover:bg-primary/20 border-primary/20'
-                            : 'bg-amber-50 hover:bg-amber-100 border-amber-200 text-amber-900'
+                          entry.type === 'post' && entry.post.state === 'publicado'
+                            ? 'border-emerald-300 bg-emerald-50 text-emerald-950 hover:bg-emerald-100'
+                            : entry.type === 'post'
+                              ? 'border-primary/20 bg-primary/10 hover:bg-primary/20'
+                              : 'border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100'
                         )}
                       >
                         <div className="flex items-center gap-1">
@@ -175,6 +206,26 @@ export default function Calendar({
                         <div className="truncate opacity-80">
                           {entry.subtitle}
                         </div>
+                        {entry.type === 'post' && entry.post.state === 'publicado' && Boolean(entry.post.views || entry.post.likes || entry.post.comments || entry.post.shares || entry.post.saves) && (
+                          <div className="mt-1.5 truncate border-t border-emerald-200 pt-1.5 text-[10px] font-medium text-emerald-800">
+                            {(entry.post.views || 0).toLocaleString('es-ES')} vistas · {((entry.post.likes || 0) + (entry.post.comments || 0) + (entry.post.shares || 0) + (entry.post.saves || 0)).toLocaleString('es-ES')} interacciones
+                          </div>
+                        )}
+                        {entry.type === 'post' && entry.post.state === 'planificado' && !isAfter(startOfDay(entry.date), today) && onPostPublish && (
+                          <button
+                            type="button"
+                            disabled={publishingId === entry.id}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleQuickPublish(entry.post);
+                            }}
+                            className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-200 bg-white/90 px-2 py-1.5 text-[11px] font-semibold text-emerald-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-wait disabled:opacity-60"
+                            aria-label={`Marcar ${entry.label} como publicada`}
+                          >
+                            {publishingId === entry.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+                            {publishingId === entry.id ? 'Actualizando…' : 'Marcar publicada'}
+                          </button>
+                        )}
                       </div>
                     ) : i === 3 ? (
                       <div key="more" className="text-xs text-center text-muted-foreground">

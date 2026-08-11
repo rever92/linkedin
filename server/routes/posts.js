@@ -51,6 +51,25 @@ router.post('/upsert', auth, async (req, res, next) => {
 
     await LinkedInPost.bulkWrite(operations);
 
+    const importedMetrics = posts
+      .filter((post) => post.url)
+      .map((post) => ({
+        updateOne: {
+          filter: { user_id: req.userId, published_post_url: post.url },
+          update: {
+            $set: {
+              views: post.views || 0,
+              likes: post.likes || 0,
+              comments: post.comments || 0,
+              shares: post.shares || 0,
+              saves: post.saves || 0,
+              metrics_updated_at: new Date(),
+            },
+          },
+        },
+      }));
+    if (importedMetrics.length) await PlannerPost.bulkWrite(importedMetrics);
+
     // An import may arrive after the idea was marked as published. In that
     // case, carry the idea taxonomy forward automatically to close the loop.
     const publishedIdeas = await PlannerPost.find({

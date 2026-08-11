@@ -7,11 +7,74 @@ import ContentPlan from '../models/ContentPlan.js';
 import ContentPlanItem from '../models/ContentPlanItem.js';
 import Recommendation from '../models/Recommendation.js';
 import LinkedInPost from '../models/LinkedInPost.js';
+import ContentTaxonomy, { TAXONOMY_KINDS } from '../models/ContentTaxonomy.js';
 import { generateContentPlan, generatePlannedPostContent, optimizePlannedPost } from '../services/geminiPlannerService.js';
 
 const router = Router();
-const editableFields = ['content', 'content_type', 'state', 'scheduled_datetime', 'plan_item_id', 'titulo', 'linea_editorial', 'funcion_editorial', 'formato', 'fuente', 'punto_de_vista', 'hipotesis', 'activo_reutilizable', 'published_post_url'];
+const metricFields = ['views', 'likes', 'comments', 'shares', 'saves'];
+const editableFields = ['content', 'content_type', 'state', 'scheduled_datetime', 'plan_item_id', 'titulo', 'linea_editorial', 'funcion_editorial', 'formato', 'fuente', 'punto_de_vista', 'hipotesis', 'activo_reutilizable', 'published_post_url', ...metricFields];
 const pickEditable = (body) => Object.fromEntries(editableFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
+const pickMetrics = (body) => Object.fromEntries(metricFields.filter((field) => body[field] !== undefined).map((field) => [field, body[field]]));
+
+const defaultTaxonomies = {
+  linea_editorial: ['IA para CIOs y C-Level', 'Casos reales y lecciones', 'Frameworks y checklists', 'Opinión sobre tendencias y hype', 'Marca personal y bastidores'],
+  funcion_editorial: ['alcance', 'autoridad', 'conversacion', 'flexible'],
+  formato: ['texto', 'carrusel', 'compartido', 'video', 'meme', 'articulo'],
+};
+const taxonomyFieldMap = {
+  linea_editorial: 'linea_editorial',
+  funcion_editorial: 'funcion_editorial',
+  formato: 'formato',
+};
+const normalizeTaxonomyValue = (value) => String(value || '').trim().toLocaleLowerCase('es-ES');
+
+async function ensureDefaultTaxonomies(userId) {
+  const operations = Object.entries(defaultTaxonomies).flatMap(([kind, values]) => values.map((value, index) => ({
+    updateOne: {
+      filter: { user_id: userId, kind, normalized_value: normalizeTaxonomyValue(value) },
+      update: { $setOnInsert: { user_id: userId, kind, value, normalized_value: normalizeTaxonomyValue(value), active: true, is_default: true, sort_order: index } },
+      upsert: true,
+    },
+  })));
+  await ContentTaxonomy.bulkWrite(operations);
+
+  // Preserve free-form values that already exist in historical content.
+  const discovered = await Promise.all(TAXONOMY_KINDS.map(async (kind) => {
+    const [plannerValues, linkedinValues] = await Promise.all([
+      PlannerPost.distinct(taxonomyFieldMap[kind], { user_id: userId }),
+      LinkedInPost.distinct(taxonomyFieldMap[kind], { user_id: userId }),
+    ]);
+    return { kind, values: Array.from(new Set([...plannerValues, ...linkedinValues].filter(Boolean))) };
+  }));
+  const discoveredOperations = discovered.flatMap(({ kind, values }) => values.map((value) => ({
+    updateOne: {
+      filter: { user_id: userId, kind, normalized_value: normalizeTaxonomyValue(value) },
+      update: { $setOnInsert: { user_id: userId, kind, value, normalized_value: normalizeTaxonomyValue(value), active: true, is_default: false } },
+      upsert: true,
+    },
+  })));
+  if (discoveredOperations.length) await ContentTaxonomy.bulkWrite(discoveredOperations);
+}
+
+function buildAnalyticsBreakdown(posts, field) {
+  const groups = new Map();
+  posts.forEach((post) => {
+    const value = post[field] || 'Sin clasificar';
+    const current = groups.get(value) || { value, posts: 0, views: 0, likes: 0, comments: 0, shares: 0, saves: 0 };
+    current.posts += 1;
+    metricFields.forEach((metric) => { current[metric] += Number(post[metric] || 0); });
+    groups.set(value, current);
+  });
+  return Array.from(groups.values()).map((group) => {
+    const interactions = group.likes + group.comments + group.shares + group.saves;
+    return {
+      ...group,
+      interactions,
+      average_views: group.posts ? Math.round(group.views / group.posts) : 0,
+      engagement_rate: group.views ? Math.round((interactions / group.views) * 10000) / 100 : 0,
+    };
+  }).sort((a, b) => b.views - a.views);
+}
 
 function normalizeStringArray(value) {
   if (Array.isArray(value)) {
@@ -240,22 +303,165 @@ router.get('/posts', auth, async (req, res, next) => {
   }
 });
 
+// GET /api/planner/taxonomies - List the user's content taxonomies.
+router.get('/taxonomies', auth, async (req, res, next) => {
+  try {
+    await ensureDefaultTaxonomies(req.userId);
+    const filter = { user_id: req.userId };
+    if (req.query.include_inactive !== 'true') filter.active = true;
+    const taxonomies = await ContentTaxonomy.find(filter).sort({ kind: 1, sort_order: 1, value: 1 });
+    res.json(taxonomies);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// POST /api/planner/taxonomies - Create or reactivate a taxonomy value.
+router.post('/taxonomies', auth, async (req, res, next) => {
+  try {
+    const kind = String(req.body.kind || '');
+    const value = String(req.body.value || '').trim();
+    if (!TAXONOMY_KINDS.includes(kind)) return res.status(400).json({ error: 'Tipo de taxonomía no válido' });
+    if (!value) return res.status(400).json({ error: 'El valor es obligatorio' });
+
+    await ensureDefaultTaxonomies(req.userId);
+    const normalizedValue = normalizeTaxonomyValue(value);
+    const existing = await ContentTaxonomy.findOne({ user_id: req.userId, kind, normalized_value: normalizedValue });
+    if (existing?.active) return res.status(409).json({ error: 'Ese valor ya existe' });
+    if (existing) {
+      existing.value = value;
+      existing.active = true;
+      await existing.save();
+      return res.json(existing);
+    }
+
+    const last = await ContentTaxonomy.findOne({ user_id: req.userId, kind }).sort({ sort_order: -1 });
+    const taxonomy = await ContentTaxonomy.create({
+      user_id: req.userId,
+      kind,
+      value,
+      normalized_value: normalizedValue,
+      active: true,
+      sort_order: Number(last?.sort_order || 0) + 1,
+    });
+    res.status(201).json(taxonomy);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// PUT /api/planner/taxonomies/:id - Rename, reorder, or reactivate a taxonomy.
+router.put('/taxonomies/:id', auth, async (req, res, next) => {
+  try {
+    const taxonomy = await ContentTaxonomy.findOne({ _id: req.params.id, user_id: req.userId });
+    if (!taxonomy) return res.status(404).json({ error: 'Taxonomía no encontrada' });
+
+    const previousValue = taxonomy.value;
+    if (req.body.value !== undefined) {
+      const value = String(req.body.value || '').trim();
+      if (!value) return res.status(400).json({ error: 'El valor es obligatorio' });
+      const normalizedValue = normalizeTaxonomyValue(value);
+      const duplicate = await ContentTaxonomy.findOne({
+        _id: { $ne: taxonomy._id },
+        user_id: req.userId,
+        kind: taxonomy.kind,
+        normalized_value: normalizedValue,
+      });
+      if (duplicate) return res.status(409).json({ error: 'Ese valor ya existe' });
+      taxonomy.value = value;
+      taxonomy.normalized_value = normalizedValue;
+    }
+    if (req.body.active !== undefined) taxonomy.active = Boolean(req.body.active);
+    if (req.body.sort_order !== undefined) taxonomy.sort_order = Number(req.body.sort_order || 0);
+    await taxonomy.save();
+
+    if (taxonomy.value !== previousValue) {
+      const field = taxonomyFieldMap[taxonomy.kind];
+      await Promise.all([
+        PlannerPost.updateMany({ user_id: req.userId, [field]: previousValue }, { $set: { [field]: taxonomy.value } }),
+        LinkedInPost.updateMany({ user_id: req.userId, [field]: previousValue }, { $set: { [field]: taxonomy.value } }),
+      ]);
+    }
+    res.json(taxonomy);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// DELETE /api/planner/taxonomies/:id - Hide a value without altering historical posts.
+router.delete('/taxonomies/:id', auth, async (req, res, next) => {
+  try {
+    const taxonomy = await ContentTaxonomy.findOneAndUpdate(
+      { _id: req.params.id, user_id: req.userId },
+      { active: false },
+      { new: true }
+    );
+    if (!taxonomy) return res.status(404).json({ error: 'Taxonomía no encontrada' });
+    res.json(taxonomy);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/planner/analytics - Published post performance with editorial filters.
+router.get('/analytics', auth, async (req, res, next) => {
+  try {
+    const filter = { user_id: req.userId, state: 'publicado' };
+    TAXONOMY_KINDS.forEach((kind) => {
+      if (req.query[kind]) filter[kind] = req.query[kind];
+    });
+    const posts = await PlannerPost.find(filter).sort({ scheduled_datetime: -1, createdAt: -1 });
+    const totals = posts.reduce((acc, post) => {
+      metricFields.forEach((metric) => { acc[metric] += Number(post[metric] || 0); });
+      return acc;
+    }, { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 });
+    const interactions = totals.likes + totals.comments + totals.shares + totals.saves;
+    const summary = {
+      posts: posts.length,
+      posts_with_metrics: posts.filter((post) => metricFields.some((metric) => Number(post[metric] || 0) > 0)).length,
+      ...totals,
+      interactions,
+      average_views: posts.length ? Math.round(totals.views / posts.length) : 0,
+      engagement_rate: totals.views ? Math.round((interactions / totals.views) * 10000) / 100 : 0,
+    };
+    res.json({
+      summary,
+      breakdowns: {
+        linea_editorial: buildAnalyticsBreakdown(posts, 'linea_editorial'),
+        funcion_editorial: buildAnalyticsBreakdown(posts, 'funcion_editorial'),
+        formato: buildAnalyticsBreakdown(posts, 'formato'),
+      },
+      posts,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // POST /api/planner/posts - Create a new planner post
 router.post('/posts', auth, async (req, res, next) => {
   try {
     const { content, content_type, state = 'borrador', scheduled_datetime, plan_item_id, ...metadata } = pickEditable(req.body);
+    const metrics = pickMetrics(req.body);
+    if (Object.keys(metrics).length) metadata.metrics_updated_at = new Date();
 
     const post = new PlannerPost({
       user_id: req.userId,
       content: content || '',
       content_type: content_type || '',
       state,
-      scheduled_datetime: state === 'planificado' ? (scheduled_datetime || null) : null,
+      scheduled_datetime: ['planificado', 'publicado'].includes(state) ? (scheduled_datetime || null) : null,
       plan_item_id: plan_item_id || null,
       ...metadata,
     });
 
     await post.save();
+    if (post.state === 'publicado' && post.published_post_url) {
+      await LinkedInPost.findOneAndUpdate(
+        { url: post.published_post_url, user_id: req.userId },
+        { $set: { linea_editorial: post.linea_editorial, funcion_editorial: post.funcion_editorial, formato: post.formato, ...metrics } }
+      );
+    }
     res.status(201).json(post);
   } catch (error) {
     next(error);
@@ -267,22 +473,31 @@ router.put('/posts/:id', auth, async (req, res, next) => {
   try {
     const { content, content_type, state, scheduled_datetime, plan_item_id, ...metadata } = pickEditable(req.body);
     const updates = { ...metadata };
+    const metrics = pickMetrics(req.body);
+    if (Object.keys(metrics).length) updates.metrics_updated_at = new Date();
 
     if (content !== undefined) updates.content = content;
     if (content_type !== undefined) updates.content_type = content_type;
     if (state !== undefined) updates.state = state;
-    if (state !== undefined && state !== 'planificado') updates.scheduled_datetime = null;
+    if (state !== undefined && !['planificado', 'publicado'].includes(state)) updates.scheduled_datetime = null;
     else if (scheduled_datetime !== undefined) updates.scheduled_datetime = scheduled_datetime;
     if (plan_item_id !== undefined) updates.plan_item_id = plan_item_id;
 
     const post = await PlannerPost.findOneAndUpdate(
       { _id: req.params.id, user_id: req.userId },
       updates,
-      { new: true }
+      { new: true, runValidators: true }
     );
 
     if (!post) {
       return res.status(404).json({ error: 'Post no encontrado' });
+    }
+
+    if (post.state === 'publicado' && post.published_post_url) {
+      await LinkedInPost.findOneAndUpdate(
+        { url: post.published_post_url, user_id: req.userId },
+        { $set: { linea_editorial: post.linea_editorial, funcion_editorial: post.funcion_editorial, formato: post.formato, ...metrics } }
+      );
     }
 
     res.json(post);
@@ -294,18 +509,25 @@ router.put('/posts/:id', auth, async (req, res, next) => {
 // POST /api/planner/posts/:id/publish - close the idea → metrics loop.
 router.post('/posts/:id/publish', auth, async (req, res, next) => {
   try {
-    const { published_post_url } = req.body;
-    if (!published_post_url) return res.status(400).json({ error: 'Se requiere la URL de la publicación' });
+    const { published_post_url, scheduled_datetime } = req.body;
+    const metrics = pickMetrics(req.body);
+    const updates = { state: 'publicado', ...metrics };
+    if (published_post_url !== undefined) updates.published_post_url = published_post_url;
+    if (scheduled_datetime !== undefined) updates.scheduled_datetime = scheduled_datetime;
+    if (Object.keys(metrics).length) updates.metrics_updated_at = new Date();
     const post = await PlannerPost.findOneAndUpdate(
       { _id: req.params.id, user_id: req.userId },
-      { state: 'publicado', scheduled_datetime: null, published_post_url },
-      { new: true }
+      updates,
+      { new: true, runValidators: true }
     );
     if (!post) return res.status(404).json({ error: 'Post no encontrado' });
-    await LinkedInPost.findOneAndUpdate(
-      { url: published_post_url, user_id: req.userId },
-      { $set: { linea_editorial: post.linea_editorial, funcion_editorial: post.funcion_editorial, formato: post.formato } }
-    );
+    if (post.published_post_url) {
+      await LinkedInPost.findOneAndUpdate(
+        { url: post.published_post_url, user_id: req.userId },
+        { $set: { linea_editorial: post.linea_editorial, funcion_editorial: post.funcion_editorial, formato: post.formato, ...metrics } }
+      );
+    }
+
     res.json(post);
   } catch (error) { next(error); }
 });

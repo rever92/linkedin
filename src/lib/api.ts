@@ -2,10 +2,13 @@ import { AuthSession, AuthUser } from '../types/auth';
 import {
   ContentPlan,
   ContentPlanItem,
+  ContentTaxonomy,
   GeneratePlanRequest,
   PlanEditorContext,
+  PlannerAnalytics,
   Post,
   StrategyProfile,
+  TaxonomyKind,
 } from '../types/posts';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
@@ -219,6 +222,33 @@ class ApiClient {
     return this.request('/planner/posts');
   }
 
+  async getPlannerTaxonomies(includeInactive = false): Promise<ContentTaxonomy[]> {
+    return this.request(`/planner/taxonomies${includeInactive ? '?include_inactive=true' : ''}`);
+  }
+
+  async createPlannerTaxonomy(data: { kind: TaxonomyKind; value: string }): Promise<ContentTaxonomy> {
+    return this.request('/planner/taxonomies', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updatePlannerTaxonomy(id: string, data: Partial<Pick<ContentTaxonomy, 'value' | 'active' | 'sort_order'>>): Promise<ContentTaxonomy> {
+    return this.request(`/planner/taxonomies/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deletePlannerTaxonomy(id: string): Promise<ContentTaxonomy> {
+    return this.request(`/planner/taxonomies/${id}`, { method: 'DELETE' });
+  }
+
+  async getPlannerAnalytics(filters: Partial<Record<TaxonomyKind, string>> = {}): Promise<PlannerAnalytics> {
+    const query = new URLSearchParams(Object.entries(filters).filter(([, value]) => Boolean(value)) as [string, string][]);
+    return this.request(`/planner/analytics${query.size ? `?${query.toString()}` : ''}`);
+  }
+
   async createPlannerPost(data: Partial<Post>): Promise<Post> {
     return this.request('/planner/posts', {
       method: 'POST',
@@ -233,9 +263,9 @@ class ApiClient {
     });
   }
 
-  async publishPlannerPost(id: string, published_post_url: string): Promise<any> {
+  async publishPlannerPost(id: string, data: Partial<Post> = {}): Promise<Post> {
     return this.request(`/planner/posts/${id}/publish`, {
-      method: 'POST', body: JSON.stringify({ published_post_url }),
+      method: 'POST', body: JSON.stringify(data),
     });
   }
 

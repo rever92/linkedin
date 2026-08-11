@@ -44,10 +44,10 @@ const linkedInPostSchema = new mongoose.Schema({
   category: String,
   linea_editorial: {
     type: String,
-    enum: ['IA para CIOs y C-Level', 'Casos reales y lecciones', 'Frameworks y checklists', 'Opinión sobre tendencias y hype', 'Marca personal y bastidores'],
+    trim: true,
   },
-  funcion_editorial: { type: String, enum: ['alcance', 'autoridad', 'conversacion', 'flexible'] },
-  formato: { type: String, enum: ['texto', 'carrusel', 'compartido', 'video', 'meme', 'articulo'] },
+  funcion_editorial: { type: String, trim: true },
+  formato: { type: String, trim: true },
 }, {
   timestamps: true,
 });

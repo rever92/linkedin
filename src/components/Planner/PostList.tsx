@@ -3,7 +3,7 @@ import { Post, PostState, getPostId } from '../../types/posts';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Lightbulb, Search, CalendarClock, CheckCircle2, CircleDot, ExternalLink } from 'lucide-react';
+import { Eye, Heart, Lightbulb, Search, CalendarClock, CheckCircle2, CircleDot, ExternalLink, MessageCircle, Repeat2 } from 'lucide-react';
 
 const states: { value: PostState | 'todos'; label: string; icon: typeof Lightbulb }[] = [
   { value: 'todos', label: 'Todas', icon: Lightbulb },
@@ -40,7 +40,8 @@ export default function PostList({ posts, onPostSelect }: Props) {
         <div className="mb-3 flex items-start justify-between gap-3"><span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">{post.linea_editorial || 'Sin línea editorial'}</span><span className="text-xs text-slate-400">{post.formato || 'texto'}</span></div>
         <h3 className="line-clamp-2 text-base font-semibold text-slate-900">{post.titulo || post.content || 'Idea sin título'}</h3>
         {post.punto_de_vista && <p className="mt-2 line-clamp-2 text-sm text-slate-600">{post.punto_de_vista}</p>}
-        <div className="mt-4 flex items-center justify-between border-t pt-3 text-xs text-slate-500"><span>{post.fuente || 'Añade la fuente'}</span>{post.published_post_url ? <ExternalLink className="h-4 w-4 text-emerald-600" /> : post.scheduled_datetime ? <span className="flex items-center gap-1"><CalendarClock className="h-3.5 w-3.5" /> Programada</span> : null}</div>
+        {post.state === 'publicado' && <div className="mt-4 grid grid-cols-4 gap-1 rounded-xl border border-emerald-100 bg-emerald-50 px-2 py-2 text-[11px] font-medium text-emerald-800"><span className="flex items-center justify-center gap-1" title="Visualizaciones"><Eye className="h-3.5 w-3.5" />{(post.views || 0).toLocaleString('es-ES')}</span><span className="flex items-center justify-center gap-1" title="Reacciones"><Heart className="h-3.5 w-3.5" />{(post.likes || 0).toLocaleString('es-ES')}</span><span className="flex items-center justify-center gap-1" title="Comentarios"><MessageCircle className="h-3.5 w-3.5" />{(post.comments || 0).toLocaleString('es-ES')}</span><span className="flex items-center justify-center gap-1" title="Compartidos"><Repeat2 className="h-3.5 w-3.5" />{(post.shares || 0).toLocaleString('es-ES')}</span></div>}
+        <div className="mt-4 flex items-center justify-between border-t pt-3 text-xs text-slate-500"><span>{post.fuente || 'Añade la fuente'}</span>{post.published_post_url ? <ExternalLink className="h-4 w-4 text-emerald-600" /> : post.scheduled_datetime ? <span className={`flex items-center gap-1 ${post.state === 'publicado' ? 'font-medium text-emerald-700' : ''}`}>{post.state === 'publicado' ? <CheckCircle2 className="h-3.5 w-3.5" /> : <CalendarClock className="h-3.5 w-3.5" />} {post.state === 'publicado' ? 'Publicada' : 'Programada'}</span> : null}</div>
       </button>)}</div>
     {filtered.length === 0 && <div className="rounded-2xl border border-dashed p-12 text-center text-slate-500"><Lightbulb className="mx-auto mb-3 h-7 w-7" />No hay ideas aquí todavía.</div>}
   </section>;

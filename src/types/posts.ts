@@ -1,7 +1,51 @@
 export type PostState = 'borrador' | 'listo' | 'planificado' | 'publicado';
-export type LineaEditorial = 'IA para CIOs y C-Level' | 'Casos reales y lecciones' | 'Frameworks y checklists' | 'Opinión sobre tendencias y hype' | 'Marca personal y bastidores';
-export type FuncionEditorial = 'alcance' | 'autoridad' | 'conversacion' | 'flexible';
-export type FormatoPost = 'texto' | 'carrusel' | 'compartido' | 'video' | 'meme' | 'articulo';
+export type LineaEditorial = string;
+export type FuncionEditorial = string;
+export type FormatoPost = string;
+export type TaxonomyKind = 'linea_editorial' | 'funcion_editorial' | 'formato';
+
+export interface ContentTaxonomy {
+  id?: string;
+  _id?: string;
+  user_id?: string;
+  kind: TaxonomyKind;
+  value: string;
+  active: boolean;
+  is_default?: boolean;
+  sort_order?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AnalyticsBreakdown {
+  value: string;
+  posts: number;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  interactions: number;
+  average_views: number;
+  engagement_rate: number;
+}
+
+export interface PlannerAnalytics {
+  summary: {
+    posts: number;
+    posts_with_metrics: number;
+    views: number;
+    likes: number;
+    comments: number;
+    shares: number;
+    saves: number;
+    interactions: number;
+    average_views: number;
+    engagement_rate: number;
+  };
+  breakdowns: Record<TaxonomyKind, AnalyticsBreakdown[]>;
+  posts: Post[];
+}
 
 export interface Post {
   id?: string;
@@ -22,6 +66,12 @@ export interface Post {
   hipotesis?: string;
   activo_reutilizable?: string;
   published_post_url?: string;
+  views?: number;
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  saves?: number;
+  metrics_updated_at?: string | null;
   created_at?: string;
   createdAt?: string;
   updated_at?: string;
