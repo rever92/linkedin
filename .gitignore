@@ -25,3 +25,4 @@ dist-ssr
 
 # Ignorar archivos de configuración sensibles
 .env*
+!.env.example

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import auth from '../middleware/auth.js';
+import apiKeyAuth from '../middleware/apiKeyAuth.js';
 import PlannerPost from '../models/PlannerPost.js';
 import PostOptimization from '../models/PostOptimization.js';
 import ContentStrategyProfile from '../models/ContentStrategyProfile.js';
@@ -119,6 +120,25 @@ function buildAnalyticsBreakdown(posts, field) {
       engagement_rate: group.engagement_rate_samples ? Math.round((group.engagement_rate_sum / group.engagement_rate_samples) * 100) / 100 : 0,
     };
   }).sort((a, b) => b.views - a.views);
+}
+
+// Maps a legacy breakdown entry (ES/EN duplicates) to canonical Spanish-only
+// names for the /analytics/publico contract.
+function toCanonicalBreakdown(group) {
+  return {
+    valor: group.value,
+    publicaciones: group.posts,
+    publicaciones_con_metricas: group.posts_with_metrics,
+    impresiones: group.impresiones,
+    reacciones: group.reacciones,
+    comentarios: group.comentarios,
+    compartidos: group.compartidos,
+    guardados: group.guardados,
+    interacciones: group.interactions,
+    promedio_impresiones: group.average_views,
+    promedio_interacciones: group.average_interactions,
+    tasa_interaccion: group.engagement_rate,
+  };
 }
 
 function normalizeStringArray(value) {
@@ -476,6 +496,74 @@ router.delete('/taxonomies/:id', auth, async (req, res, next) => {
     );
     if (!taxonomy) return res.status(404).json({ error: 'Taxonomía no encontrada' });
     res.json(taxonomy);
+  } catch (error) {
+    next(error);
+  }
+});
+
+// GET /api/planner/analytics/publico - Same data as /analytics but with a stable,
+// read-only shape for external consumers (authenticated via API key or JWT).
+// /analytics keeps the legacy summary (ES/EN duplicates) for the app and the MCP,
+// so this route is the only canonical contract for services like nexo.
+// The guard is mounted with router.use so the API key gets 403 on any non-GET
+// method hitting this path, not just on the GET handler.
+router.use('/analytics/publico', apiKeyAuth);
+router.get('/analytics/publico', async (req, res, next) => {
+  try {
+    const filter = { user_id: req.userId, state: 'publicado' };
+    TAXONOMY_KINDS.forEach((kind) => {
+      if (req.query[kind]) filter[kind] = req.query[kind];
+    });
+    const posts = await PlannerPost.find(filter).sort({ scheduled_datetime: -1, createdAt: -1 });
+    const totals = metricFields.reduce((acc, metric) => {
+      acc[metric] = posts.reduce((sum, post) => sum + metricValue(post, metric), 0);
+      return acc;
+    }, { impresiones: 0, reacciones: 0, comentarios: 0, compartidos: 0, guardados: 0 });
+    const interacciones = totals.reacciones + totals.comentarios + totals.compartidos + totals.guardados;
+    const postsWithMetrics = posts.filter(hasRecordedMetrics);
+    const divisor = postsWithMetrics.length;
+    const engagementRates = postsWithMetrics
+      .filter((post) => metricValue(post, 'impresiones') > 0)
+      .map((post) => ((metricValue(post, 'reacciones') + metricValue(post, 'comentarios') + metricValue(post, 'compartidos') + metricValue(post, 'guardados')) / metricValue(post, 'impresiones')) * 100);
+    res.json({
+      generado_en: new Date().toISOString(),
+      resumen: {
+        publicaciones_totales: posts.length,
+        publicaciones_con_metricas: divisor,
+        impresiones: totals.impresiones,
+        reacciones: totals.reacciones,
+        comentarios: totals.comentarios,
+        compartidos: totals.compartidos,
+        guardados: totals.guardados,
+        interacciones,
+        promedio_impresiones: divisor ? Math.round(totals.impresiones / divisor) : 0,
+        promedio_interacciones: divisor ? Math.round((interacciones / divisor) * 10) / 10 : 0,
+        tasa_interaccion: engagementRates.length ? Math.round((engagementRates.reduce((sum, rate) => sum + rate, 0) / engagementRates.length) * 100) / 100 : 0,
+      },
+      desgloses: {
+        linea_editorial: buildAnalyticsBreakdown(posts, 'linea_editorial').map(toCanonicalBreakdown),
+        funcion_editorial: buildAnalyticsBreakdown(posts, 'funcion_editorial').map(toCanonicalBreakdown),
+        formato: buildAnalyticsBreakdown(posts, 'formato').map(toCanonicalBreakdown),
+      },
+      publicaciones: posts.map((post) => ({
+        id: post._id,
+        titulo: post.titulo || null,
+        fecha_publicacion: post.scheduled_datetime || null,
+        fecha_medicion: post.fecha_medicion || null,
+        url: post.published_post_url || null,
+        linea_editorial: post.linea_editorial || null,
+        funcion_editorial: post.funcion_editorial || null,
+        formato: post.formato || null,
+        con_metricas: hasRecordedMetrics(post),
+        metricas: {
+          impresiones: metricValue(post, 'impresiones'),
+          reacciones: metricValue(post, 'reacciones'),
+          comentarios: metricValue(post, 'comentarios'),
+          compartidos: metricValue(post, 'compartidos'),
+          guardados: metricValue(post, 'guardados'),
+        },
+      })),
+    });
   } catch (error) {
     next(error);
   }

@@ -32,6 +32,8 @@ npm install
 
 ### Backend (`server/.env`)
 
+Plantilla en `server/.env.example`:
+
 ```env
 MONGODB_URI=mongodb://localhost:27017/linksight
 JWT_SECRET=cadena-aleatoria-larga-min-32-chars
@@ -42,6 +44,11 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 APP_URL=http://localhost:5173
 PORT=3001
 NODE_ENV=development
+
+# Opcional: API key de solo lectura para servicios externos
+# (ver seccion "API de solo lectura para servicios externos")
+# LINKSIGHT_API_KEY=clave-aleatoria-larga
+# LINKSIGHT_API_USER_ID=id-mongo-del-usuario
 ```
 
 ### Frontend (`.env.development`)
@@ -141,6 +148,7 @@ Configurar en **Plesk > Node.js > Environment Variables** (no usar .env en produ
 - `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
 - `APP_URL=https://tu-dominio.com`
 - `NODE_ENV=production`
+- `LINKSIGHT_API_KEY`, `LINKSIGHT_API_USER_ID` (opcionales, API de solo lectura para servicios externos)
 
 ### 5. Configuracion de Plesk Node.js
 
@@ -212,6 +220,7 @@ Configura en **Plesk > Node.js > Environment Variables**:
 - `STRIPE_WEBHOOK_SECRET`
 - `APP_URL=https://tu-dominio.com`
 - `NODE_ENV=production`
+- `LINKSIGHT_API_KEY`, `LINKSIGHT_API_USER_ID` (opcionales, ver "API de solo lectura para servicios externos")
 
 ### 6. Primer despliegue
 
@@ -289,8 +298,66 @@ Actualizar en [Stripe Dashboard > Webhooks](https://dashboard.stripe.com/webhook
 | POST | `/api/planner/posts` | Crear post |
 | PUT | `/api/planner/posts/:id` | Actualizar post |
 | POST | `/api/planner/posts/:id/optimizations` | Guardar optimizacion |
+| GET | `/api/planner/analytics` | Analytics del planificador (JWT) |
+| GET | `/api/planner/analytics/publico` | Analytics en forma canonica (JWT o API key de solo lectura) |
 | GET | `/api/recommendations/latest` | Ultima recomendacion |
 | POST | `/api/recommendations` | Guardar recomendacion |
+
+## API de solo lectura para servicios externos
+
+Para que un servicio externo (p. ej. un hub personal) consuma las analiticas sin
+credenciales de la app ni el servidor MCP, existe una API key de solo lectura:
+
+- **Variable**: `LINKSIGHT_API_KEY` (la clave) y `LINKSIGHT_API_USER_ID` (el `_id`
+  de MongoDB del usuario cuyas metricas se exponen). Ambas se configuran en
+  **Plesk > Node.js > Environment Variables**; si no estan definidas, el guard es
+  un no-op y el backend se comporta exactamente igual.
+- **Alcance**: la clave solo autentica peticiones `GET` en
+  `/api/planner/analytics/publico` y solo si el `Bearer` coincide con
+  `LINKSIGHT_API_KEY` (comparacion en tiempo constante). Cualquier otro metodo
+  con esa clave recibe `403`, y el resto de rutas siguen exigiento JWT como
+  siempre.
+- **Endpoint**: `GET /api/planner/analytics/publico` con
+  `Authorization: Bearer <LINKSIGHT_API_KEY>`:
+
+```bash
+curl -H "Authorization: Bearer $LINKSIGHT_API_KEY" \
+  https://linksight.es/api/planner/analytics/publico
+```
+
+La respuesta usa nombres castellanos univocos (sin duplicados ES/EN ni
+solapamientos entre totales y posts con metricas):
+
+```json
+{
+  "generado_en": "2026-08-16T10:00:00.000Z",
+  "resumen": {
+    "publicaciones_totales": 131,
+    "publicaciones_con_metricas": 7,
+    "impresiones": 0, "reacciones": 0, "comentarios": 0,
+    "compartidos": 0, "guardados": 0, "interacciones": 0,
+    "promedio_impresiones": 0, "promedio_interacciones": 0,
+    "tasa_interaccion": 0
+  },
+  "desgloses": {
+    "linea_editorial": [ { "valor": "...", "publicaciones": 0 } ],
+    "funcion_editorial": [],
+    "formato": []
+  },
+  "publicaciones": [
+    {
+      "id": "...", "titulo": "...", "fecha_publicacion": "...",
+      "fecha_medicion": "...", "url": "...",
+      "linea_editorial": "...", "funcion_editorial": "...", "formato": "...",
+      "con_metricas": true,
+      "metricas": { "impresiones": 0, "reacciones": 0, "comentarios": 0, "compartidos": 0, "guardados": 0 }
+    }
+  ]
+}
+```
+
+`GET /api/planner/analytics` (la ruta original) no cambia: sigue siendo la via
+para la app y para el servidor MCP de clientes conversacionales.
 
 ## Estructura
 
